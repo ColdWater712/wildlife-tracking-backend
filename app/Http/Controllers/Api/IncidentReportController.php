@@ -110,7 +110,7 @@ class IncidentReportController extends ApiController
     {
         $incident = IncidentReport::findOrFail($id);
         $request->validate([
-            'file' => 'required|file|mimes:jpg,jpeg,png,webp,mp4,mov,webm,wav,mp3,m4a,ogg|max:51200',
+            'file' => 'required|file|mimes:jpg,jpeg,png,webp,mp4,mov,webm,wav,mp3,m4a,ogg,flac|max:51200',
             'analyze' => 'sometimes|boolean',
         ]);
 

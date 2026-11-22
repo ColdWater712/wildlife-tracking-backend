@@ -82,11 +82,23 @@ class UserController extends ApiController
             unset($data['password']);
         }
 
-        if (isset($data['role_id']) && (int) $user->user_id === (int) $request->user()->user_id && (int) $data['role_id'] !== (int) $user->role_id) {
+        $isSelf = (int) $user->user_id === (int) $request->user()->user_id;
+
+        if (isset($data['role_id']) && $isSelf && (int) $data['role_id'] !== (int) $user->role_id) {
             return $this->error('Anda tidak dapat mengubah role akun sendiri.', 422);
         }
+        if (($data['status'] ?? null) === 'nonaktif' && $isSelf) {
+            return $this->error('Anda tidak dapat menonaktifkan akun sendiri.', 422);
+        }
 
-        $user->update($data);
+        DB::transaction(function () use ($user, $data, $isSelf) {
+            $user->update($data);
+
+            // Akun dinonaktifkan atau password direset admin -> semua sesi lama dicabut.
+            if (($data['status'] ?? null) === 'nonaktif' || (isset($data['password']) && ! $isSelf)) {
+                $user->tokens()->delete();
+            }
+        });
 
         return $this->success(AuthController::presentUser($user->fresh('role.permissions')), 'User berhasil diperbarui');
     }

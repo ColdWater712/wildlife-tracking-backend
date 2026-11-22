@@ -4,15 +4,19 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\GpsReading;
 use App\Models\TrackingDevice;
+use App\Services\DeviceHealthService;
 use App\Services\GeofenceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 /** Data telemetri bersifat append-only: tidak ada endpoint update/delete. */
 class GpsReadingController extends ApiController
 {
-    public function __construct(private GeofenceService $geofence) {}
+    private const MESSAGES = ['device_id.exists' => 'Perangkat tidak ditemukan atau bukan kalung GPS (device_type gps).'];
+
+    public function __construct(private GeofenceService $geofence, private DeviceHealthService $health) {}
 
     public function index(Request $request)
     {
@@ -42,7 +46,7 @@ class GpsReadingController extends ApiController
 
         // Tanpa pagination: batasi ke data terbaru agar dashboard/peta tidak menarik seluruh tabel telemetri.
         if (! $request->filled('per_page') && ! $request->filled('page')) {
-            $query->limit(min(5000, $request->integer('limit', 2000)));
+            $query->limit(max(1, min(5000, $request->integer('limit', 2000))));
         }
 
         return $this->list($query);
@@ -55,7 +59,7 @@ class GpsReadingController extends ApiController
 
     public function store(Request $request)
     {
-        $data = $request->validate($this->rules());
+        $data = $request->validate($this->rules(), self::MESSAGES);
 
         $reading = DB::transaction(fn () => $this->ingest($data));
 
@@ -73,7 +77,7 @@ class GpsReadingController extends ApiController
         foreach ($this->rules() as $field => $rule) {
             $rules["readings.*.{$field}"] = $rule;
         }
-        $validated = $request->validate($rules);
+        $validated = $request->validate($rules, ['readings.*.device_id.exists' => self::MESSAGES['device_id.exists']]);
 
         $created = [];
         $skipped = 0;
@@ -94,7 +98,7 @@ class GpsReadingController extends ApiController
     private function rules(): array
     {
         return [
-            'device_id' => 'required|integer|exists:tracking_devices,device_id',
+            'device_id' => ['required', 'integer', Rule::exists('tracking_devices', 'device_id')->where('device_type', TrackingDevice::TYPE_GPS)],
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
             'recorded_at' => 'required|date|before_or_equal:' . now()->addMinutes(5)->toDateTimeString(),
@@ -136,6 +140,7 @@ class GpsReadingController extends ApiController
                 'battery_level' => $data['battery_level'] ?? null,
                 'signal_strength' => $data['signal_strength'] ?? null,
             ], fn ($v) => $v !== null));
+            $this->health->evaluate($device);
         }
 
         $reading->setRelation('device', $device);

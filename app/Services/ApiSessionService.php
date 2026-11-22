@@ -65,6 +65,13 @@ class ApiSessionService
             return false;
         }
 
+        if (($token->tokenable->status ?? 'aktif') !== 'aktif') {
+            self::forget($token->id);
+            $token->delete();
+
+            return false;
+        }
+
         if (self::isExpired($token)) {
             self::forget($token->id);
             $token->delete();

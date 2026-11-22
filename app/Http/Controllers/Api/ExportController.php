@@ -278,10 +278,29 @@ class ExportController extends ApiController
             fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, $header);
             foreach ($rows as $row) {
-                fputcsv($out, array_map(fn ($v) => is_bool($v) ? (int) $v : (is_array($v) ? json_encode($v) : $v), $row));
+                fputcsv($out, array_map(fn ($v) => self::csvCell($v), $row));
             }
             fclose($out);
         }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    /**
+     * Nilai sel CSV. Teks yang diawali = + - @ tab/CR diberi awalan ' agar
+     * Excel/Sheets tidak menjalankannya sebagai formula (CSV injection).
+     */
+    public static function csvCell(mixed $v): mixed
+    {
+        if (is_bool($v)) {
+            return (int) $v;
+        }
+        if (is_array($v)) {
+            $v = json_encode($v);
+        }
+        if (is_string($v) && $v !== '' && ! is_numeric($v) && in_array($v[0], ['=', '+', '-', '@', "\t", "\r"], true)) {
+            return "'" . $v;
+        }
+
+        return $v;
     }
 
     private function geojson(string $name, array $features)

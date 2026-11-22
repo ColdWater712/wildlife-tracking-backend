@@ -175,11 +175,9 @@ $routes = function () {
             Route::post('gps-readings/bulk', [GpsReadingController::class, 'bulk']);
 
             Route::post('animal-geo-zone-visits', [AnimalGeoZoneController::class, 'store']);
-            Route::patch('animal-geo-zone-visits/{id}/exit', [AnimalGeoZoneController::class, 'exit']);
 
             foreach (['incidents', 'incident-reports'] as $prefix) {
                 Route::post($prefix, [IncidentReportController::class, 'store']);
-                Route::put("{$prefix}/{id}", [IncidentReportController::class, 'update']);
                 Route::post("{$prefix}/{id}/media", [IncidentReportController::class, 'uploadMedia']);
             }
 
@@ -187,7 +185,16 @@ $routes = function () {
             Route::post('weather-data/sync', [WeatherDataController::class, 'sync']);
         });
 
-        Route::middleware('role:administrator_sistem')->group(function () {
+        Route::middleware('permission:update_data')->group(function () {
+            Route::patch('animal-geo-zone-visits/{id}/exit', [AnimalGeoZoneController::class, 'exit']);
+
+            foreach (['incidents', 'incident-reports'] as $prefix) {
+                Route::put("{$prefix}/{id}", [IncidentReportController::class, 'update']);
+            }
+        });
+
+        // sync-status khusus admin: dicek lewat permission (delete_data hanya dimiliki admin), bukan nama role.
+        Route::middleware('permission:delete_data')->group(function () {
             foreach (['incidents', 'incident-reports'] as $prefix) {
                 Route::patch("{$prefix}/{id}/sync-status", [IncidentReportController::class, 'updateSyncStatus']);
             }

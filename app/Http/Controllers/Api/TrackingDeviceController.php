@@ -246,6 +246,7 @@ class TrackingDeviceController extends ApiController
             'battery_level' => $data['battery_level'] ?? null,
             'signal_strength' => $data['signal_strength'] ?? null,
         ], fn ($v) => $v !== null));
+        $this->health->evaluate($device);
 
         $prediction = $ai->process($media);
 

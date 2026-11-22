@@ -6,6 +6,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Validation\Rule;
 
 class RoleController extends ApiController
@@ -57,6 +58,10 @@ class RoleController extends ApiController
             'description' => 'nullable|string|max:255',
         ]);
 
+        if (isset($data['name_role']) && $data['name_role'] !== $role->name_role && self::isSystemRole($role)) {
+            return $this->error('Nama role bawaan sistem tidak dapat diubah (dipakai untuk target notifikasi).', 422);
+        }
+
         $role->update($data);
 
         return $this->success($role->fresh('permissions'), 'Role diperbarui');
@@ -66,6 +71,9 @@ class RoleController extends ApiController
     {
         $role = Role::withCount('users')->findOrFail($id);
 
+        if (self::isSystemRole($role)) {
+            return $this->error('Role bawaan sistem tidak dapat dihapus.', 409);
+        }
         if ($role->users_count > 0) {
             return $this->error("Role masih dipakai oleh {$role->users_count} user.", 409);
         }
@@ -90,6 +98,11 @@ class RoleController extends ApiController
             'permission_ids.*' => 'integer|exists:permissions,permission_id',
         ]);
 
+        $manageRolesId = Permission::where('name_permission', 'manage_roles')->value('permission_id');
+        if ($this->isOwnRole($request, $role) && ! in_array((int) $manageRolesId, array_map('intval', $data['permission_ids']), true)) {
+            return $this->error('Anda tidak dapat mencabut manage_roles dari role Anda sendiri.', 422);
+        }
+
         DB::transaction(fn () => $role->permissions()->sync($data['permission_ids']));
 
         return $this->success($role->fresh('permissions'), 'Permission role disinkronkan');
@@ -104,12 +117,28 @@ class RoleController extends ApiController
         return $this->success($role->fresh('permissions'), 'Permission ditambahkan ke role');
     }
 
-    public function revokePermission(int $id, int $permissionId)
+    public function revokePermission(Request $request, int $id, int $permissionId)
     {
         $role = Role::findOrFail($id);
+
+        if ($this->isOwnRole($request, $role)
+            && Permission::where('permission_id', $permissionId)->value('name_permission') === 'manage_roles') {
+            return $this->error('Anda tidak dapat mencabut manage_roles dari role Anda sendiri.', 422);
+        }
         $role->permissions()->detach($permissionId);
 
         return $this->success($role->fresh('permissions'), 'Permission dicabut dari role');
+    }
+
+    private static function isSystemRole(Role $role): bool
+    {
+        return array_key_exists($role->name_role, RolePermissionSeeder::ROLES);
+    }
+
+    /** Mencegah admin mengunci dirinya sendiri dari pengelolaan role. */
+    private function isOwnRole(Request $request, Role $role): bool
+    {
+        return (int) $request->user()->role_id === (int) $role->role_id;
     }
 
     private function aliasName(Request $request): void

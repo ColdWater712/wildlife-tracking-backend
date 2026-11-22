@@ -210,6 +210,7 @@ class AiPredictionController extends ApiController
         return $disk->response($media->file_path, basename($media->file_path), [
             'Content-Type' => $media->mime_type ?: $disk->mimeType($media->file_path),
             'Cache-Control' => 'private, max-age=300',
+            'X-Content-Type-Options' => 'nosniff',
         ]);
     }
 
@@ -229,6 +230,10 @@ class AiPredictionController extends ApiController
     public function triggerPrediction(int $mediaId)
     {
         $media = AiMediaUpload::findOrFail($mediaId);
+
+        if ($media->predictions()->where('verification_status', '!=', 'pending')->exists()) {
+            return $this->error('Media ini sudah memiliki prediksi terverifikasi; analisis ulang tidak diizinkan.', 409);
+        }
 
         return $this->success($this->ai->process($media), 'Analisis AI selesai diproses', 201);
     }
