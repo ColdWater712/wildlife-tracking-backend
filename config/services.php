@@ -46,8 +46,14 @@ return [
 
     // Opsional: microservice klasifikasi audio (YAMNet / BirdNET / PANNs, dsb.)
     // Kontrak: POST {url}/classify-audio (multipart "file") -> {label, confidence, category?, species?}
+    'ai' => [
+        // true = analisis AI di background (butuh `php artisan queue:work --queue=ai,default`).
+        'queue' => (bool) env('AI_QUEUE', false),
+    ],
+
     'ai_audio' => [
         'url' => env('AI_AUDIO_SERVICE_URL'),
+        'token' => env('AI_AUDIO_SERVICE_TOKEN'),
         'model' => env('AI_AUDIO_SERVICE_MODEL', 'audio-classifier'),
         'timeout' => (int) env('AI_AUDIO_SERVICE_TIMEOUT', 60),
     ],

@@ -248,12 +248,12 @@ class TrackingDeviceController extends ApiController
         ], fn ($v) => $v !== null));
         $this->health->evaluate($device);
 
-        $prediction = $ai->process($media);
+        $prediction = $ai->analyze($media);
 
         return $this->success([
             'media' => $media->fresh(['device', 'zone', 'report']),
             'prediction' => $prediction,
-        ], 'Rekaman diterima dan dianalisis AI', 201);
+        ], $prediction->processing_status === 'queued' ? 'Rekaman diterima; analisis AI berjalan di antrean' : 'Rekaman diterima dan dianalisis AI', 201);
     }
 
     private function validated(Request $request, ?TrackingDevice $device = null): array

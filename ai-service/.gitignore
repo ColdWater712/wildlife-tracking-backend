@@ -1,0 +1,7 @@
+models/*.h5
+models/*.csv
+models/*.part
+.venv/
+venv/
+__pycache__/
+*.pyc

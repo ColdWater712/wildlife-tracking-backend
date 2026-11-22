@@ -64,6 +64,7 @@ class AudioAnalyzer
     private function viaService(string $url, string $path): array
     {
         $response = Http::timeout((int) config('services.ai_audio.timeout', 60))
+            ->withHeaders(array_filter(['X-Api-Key' => config('services.ai_audio.token')]))
             ->attach('file', fopen($path, 'r'), basename($path))
             ->post(rtrim($url, '/') . '/classify-audio');
 

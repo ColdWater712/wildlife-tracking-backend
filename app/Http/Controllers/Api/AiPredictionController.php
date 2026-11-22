@@ -94,9 +94,10 @@ class AiPredictionController extends ApiController
         ]);
 
         $media = $this->ai->storeMedia($request->file('file'), $data + ['uploaded_by' => $request->user()->user_id]);
-        $prediction = $this->ai->process($media);
+        $prediction = $this->ai->analyze($media);
 
         $message = match ($prediction->processing_status) {
+            'queued' => 'Media diunggah; analisis AI berjalan di antrean. Cek GET /ai-predictions/' . $prediction->prediction_id . '.',
             'completed' => 'Media berhasil diunggah dan dianalisis oleh AI.',
             'unrecognized' => 'Media diunggah, namun AI tidak dapat mengenali objek secara pasti.',
             default => 'Media diunggah, namun analisis AI gagal. Gunakan endpoint retry untuk mencoba lagi.',
@@ -152,7 +153,7 @@ class AiPredictionController extends ApiController
             return $this->error('Media prediksi tidak ditemukan.', 404);
         }
 
-        return $this->success($this->ai->process($prediction->media, $prediction), 'Analisis AI diulang');
+        return $this->success($this->ai->analyze($prediction->media, $prediction), 'Analisis AI diulang');
     }
 
     public function destroy(int $id)
@@ -235,7 +236,9 @@ class AiPredictionController extends ApiController
             return $this->error('Media ini sudah memiliki prediksi terverifikasi; analisis ulang tidak diizinkan.', 409);
         }
 
-        return $this->success($this->ai->process($media), 'Analisis AI selesai diproses', 201);
+        $prediction = $this->ai->analyze($media);
+
+        return $this->success($prediction, $prediction->processing_status === 'queued' ? 'Analisis AI masuk antrean' : 'Analisis AI selesai diproses', 201);
     }
 
     public function mediaPredictions(int $mediaId)

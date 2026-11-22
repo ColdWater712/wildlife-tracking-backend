@@ -30,7 +30,8 @@ class AiInsightController extends ApiController
         return $this->success([
             'success' => $groq->isConfigured(),
             'ai_service' => $groq->healthCheck(),
-            'audio_service' => config('services.ai_audio.url') ? 'configured' : 'not_configured (memakai Groq/heuristik)',
+            'audio_service' => $this->audioServiceHealth(),
+            'queue' => config('services.ai.queue') ? 'enabled (butuh queue:work)' : 'disabled (analisis langsung)',
             'timestamp' => now()->toIso8601String(),
         ]);
     }
@@ -90,5 +91,21 @@ class AiInsightController extends ApiController
             'threat_levels' => AnalysisVocabulary::THREAT_LEVELS,
             'device_types' => ['gps' => 'Kalung GPS', 'camera' => 'Kamera jebak', 'audio' => 'Perekam audio'],
         ]);
+    }
+
+    private function audioServiceHealth(): array|string
+    {
+        $url = (string) config('services.ai_audio.url');
+        if ($url === '') {
+            return 'not_configured (memakai Groq/heuristik)';
+        }
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(3)->get(rtrim($url, '/') . '/health');
+
+            return ['url' => $url, 'reachable' => $res->successful(), 'status' => $res->json('status'), 'model' => $res->json('model')];
+        } catch (\Throwable) {
+            return ['url' => $url, 'reachable' => false, 'status' => 'unreachable', 'model' => null];
+        }
     }
 }

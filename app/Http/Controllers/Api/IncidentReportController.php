@@ -123,7 +123,7 @@ class IncidentReportController extends ApiController
             'captured_at' => $incident->timestamp,
         ]);
 
-        $prediction = $request->boolean('analyze') ? $ai->process($media) : null;
+        $prediction = $request->boolean('analyze') ? $ai->analyze($media) : null;
 
         return $this->success(
             $prediction ? ['media' => $media, 'prediction' => $prediction] : $media,

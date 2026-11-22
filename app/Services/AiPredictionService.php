@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Jobs\ProcessAiMedia;
 use App\Models\AiMediaUpload;
 use App\Models\AiPrediction;
 use App\Models\TrackingDevice;
@@ -14,6 +15,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use RuntimeException;
 
 /**
@@ -86,6 +88,43 @@ class AiPredictionService
             $media->delete();
             Storage::disk(self::DISK)->delete($path);
         });
+    }
+
+    public static function queueEnabled(): bool
+    {
+        return (bool) config('services.ai.queue', false);
+    }
+
+    /**
+     * Titik masuk semua analisis. AI_QUEUE=false: dianalisis langsung (perilaku lama).
+     * AI_QUEUE=true: prediksi berstatus `queued` dikembalikan segera, analisis berjalan
+     * di worker (`php artisan queue:work --queue=ai,default`), frontend polling GET /ai-predictions/{id}.
+     */
+    public function analyze(AiMediaUpload $media, ?AiPrediction $existing = null): AiPrediction
+    {
+        if (! self::queueEnabled()) {
+            return $this->process($media, $existing);
+        }
+
+        $analysisType = $media->media_type === 'audio' ? 'audio' : 'image';
+        if ($existing) {
+            $existing->update(['processing_status' => 'queued', 'analysis_type' => $analysisType]);
+            $prediction = $existing;
+        } else {
+            $prediction = AiPrediction::create([
+                'media_id' => $media->media_id,
+                'analysis_type' => $analysisType,
+                'model_version' => 'queued-' . Str::lower((string) Str::ulid()),
+                'processing_status' => 'queued',
+                'threat_level' => 'none',
+                'verification_status' => 'pending',
+                'ai_summary' => 'Menunggu antrean analisis AI.',
+            ]);
+        }
+
+        ProcessAiMedia::dispatch($media->media_id, $prediction->prediction_id);
+
+        return $prediction->fresh(['media', 'predictedSpecies', 'predictedAnimal', 'verifiedSpecies', 'verifier']);
     }
 
     /** Jalankan analisis untuk media. Selalu mengembalikan prediksi (status failed bila gagal). */
@@ -226,6 +265,22 @@ class AiPredictionService
             ->where('media_id', $media->media_id)
             ->where('model_version', $attributes['model_version'])
             ->first();
+
+        // Prediksi lama (antrean/retry) berganti model: jaga unique(media_id, model_version).
+        if ($existing && $existing->model_version !== $attributes['model_version']) {
+            $duplicate = AiPrediction::query()
+                ->where('media_id', $media->media_id)
+                ->where('model_version', $attributes['model_version'])
+                ->whereKeyNot($existing->getKey())
+                ->first();
+
+            if ($duplicate && $duplicate->verification_status === 'pending') {
+                $existing->delete();
+                $existing = $duplicate;
+            } elseif ($duplicate) {
+                $attributes['model_version'] = mb_substr($attributes['model_version'] . '#' . $existing->getKey(), 0, 100);
+            }
+        }
 
         $reset = [
             'verification_status' => 'pending', 'verified_species_id' => null,

@@ -1,0 +1,7 @@
+tensorflow-cpu>=2.16
+tf-keras>=2.16
+numpy>=1.26
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+imageio-ffmpeg>=0.5
