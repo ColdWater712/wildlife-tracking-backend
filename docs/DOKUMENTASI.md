@@ -1,10 +1,11 @@
 # Dokumentasi Backend Wildlife Tracking
 
-Diperbarui: 2026-11-22 · Laravel 13 + Sanctum · 168 endpoint REST (juga di `/api/v1`) · 57 test lulus.
+Diperbarui: 2026-11-22 · Laravel 13 + Sanctum · 168 endpoint REST (juga di `/api/v1`) · 63 test lulus.
 
 Dokumen ini adalah rujukan utama untuk tim frontend dan backend: fitur yang sudah siap, cara memanggilnya,
 apa yang berubah di setiap rilis, fitur yang masih dikembangkan, dan hasil audit terakhir.
 Daftar endpoint ringkas ada di [`API.md`](API.md); dokumentasi interaktif di `GET /docs/api` (mode lokal).
+Menjadikan PC sebagai server tim: [`DEPLOY.md`](DEPLOY.md). Layanan AI suara: [`../ai-service/README.md`](../ai-service/README.md).
 
 Isi:
 
@@ -81,6 +82,20 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 ## 2. Apa yang diubah
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
+
+### Rilis AI suara nyata (YAMNet) & antrean AI (2026-11-22)
+
+| Area | Sebelum | Sesudah | Dampak ke FE |
+|---|---|---|---|
+| Klasifikasi suara | Groq Whisper + LLM, atau aturan WAV (akurasi rendah) | **ai-service YAMNet** (gratis, CPU, ~0,2 detik/rekaman) lewat `AI_AUDIO_SERVICE_URL`; Groq/heuristik tetap jadi cadangan bila ai-service mati | Tidak ada; `model_version` menjadi `service:yamnet-audioset-v1` |
+| Antrean analisis | Analisis selalu langsung saat upload | `AI_QUEUE=true` (opsional): upload langsung dibalas `processing_status: "queued"`, worker `queue:work` mengisi hasilnya | Bila diaktifkan, FE polling `GET /ai-predictions/{id}` |
+| Tabel antrean | Tidak ada (antrean `database` tidak bisa dipakai) | Migrasi baru `2026_11_22_000001_create_jobs_table` (`jobs`, `job_batches`, `failed_jobs`) | — |
+| `GET /ai/health` | `audio_service: configured` | Mengecek ai-service sungguhan (`reachable`, `model`) dan status antrean | Field baru `queue` |
+| Retry/antrean berganti model | Bisa bentrok unique (`media_id`, `model_version`) | Baris prediksi dipakai ulang, tidak ada duplikat | — |
+| Server tim | Tiap orang setup sendiri | `scripts/start-server.ps1` + Cloudflare Tunnel, panduan di `docs/DEPLOY.md` | FE cukup mengganti `API_URL` |
+
+Variabel baru di `.env`: `AI_AUDIO_SERVICE_URL`, `AI_AUDIO_SERVICE_MODEL`, `AI_AUDIO_SERVICE_TOKEN`, `AI_QUEUE`.
+Test baru: `tests/Feature/AiServiceIntegrationTest.php` (6 test) + uji end-to-end dengan YAMNet asli.
 
 ### Rilis audit keamanan & logika (2026-11-22)
 
@@ -314,8 +329,26 @@ const res = await api.post("/ai/upload", { formData: form, timeoutMs: 120_000 })
 // res.data.prediction.physical_condition, .behavior, .predictedAnimal?.name, .threat_level
 ```
 
-Engine: Groq (`GROQ_VISION_MODEL`, `GROQ_TEXT_MODEL`) untuk gambar/teks; suara lewat `AI_AUDIO_SERVICE_URL`
-(bila diisi), lalu Groq Whisper + LLM, lalu aturan ciri akustik WAV. Video dianalisis dari 1 frame via `ffmpeg`.
+Engine:
+
+| Analisis | Engine utama | Cadangan |
+|---|---|---|
+| Gambar (spesies, kondisi, perilaku, aktivitas manusia) | Groq vision (`GROQ_VISION_MODEL`) | — (status `failed`, bisa retry) |
+| Ringkasan laporan | Groq teks (`GROQ_TEXT_MODEL`) | Ringkasan statistik tanpa AI |
+| Suara | **ai-service YAMNet** (`AI_AUDIO_SERVICE_URL`, gratis, lokal) | Groq Whisper + LLM, lalu aturan ciri akustik WAV |
+| Video | 1 frame via `ffmpeg`, lalu analisis gambar | — |
+
+Mode antrean (`AI_QUEUE=true`): semua endpoint upload/analisis mengembalikan prediksi `queued`; jalankan
+`php artisan queue:work --queue=ai,default`. Status berjalan `queued` → `processing` → `completed`/`unrecognized`/`failed`.
+
+```ts
+// polling hasil bila AI_QUEUE=true
+let p = res.data.prediction;
+while (p.processing_status === "queued" || p.processing_status === "processing") {
+  await new Promise((r) => setTimeout(r, 2000));
+  p = (await api.get(`/ai-predictions/${p.prediction_id}`)).data;
+}
+```
 
 ---
 
@@ -324,9 +357,10 @@ Engine: Groq (`GROQ_VISION_MODEL`, `GROQ_TEXT_MODEL`) untuk gambar/teks; suara l
 | Fitur | Kondisi sekarang | Rencana |
 |---|---|---|
 | CRUD AI lanjutan | Upload, analisis, retry, verifikasi, hapus | Koreksi manual, riwayat versi prediksi, statistik akurasi per spesies |
-| Model audio khusus | Groq Whisper + LLM / aturan WAV | Microservice YAMNet/BirdNET/PANNs (`POST /classify-audio` sudah disiapkan) |
-| Deteksi objek khusus (YOLO) | Kotak objek dari model vision umum | YOLO terlatih satwa Sumatra |
-| Antrean pemrosesan AI | Analisis langsung saat upload (FE menunggu, ≤ 120 detik) | Background queue (`queued`/`processing` sudah di skema) |
+| Deteksi satwa kamera jebak | Groq vision | MegaDetector (gratis) di ai-service untuk kotak objek & jumlah individu |
+| Spesies dari gambar | Groq vision | SpeciesNet (gratis); cek label satwa Sumatra, fine-tune bila perlu |
+| Re-identifikasi individu dari foto | Skor GPS/zona/ciri fisik | MegaDescriptor (gratis, non-komersial) + galeri foto per individu |
+| Suara burung | YAMNet hanya "Bird" | BirdNET (gratis, non-komersial) |
 | Token khusus perangkat | Perangkat memakai token user biasa (ikut timeout 2 jam) | Token Sanctum ber-ability per perangkat tanpa timeout idle |
 | Pembersihan token | Token idle dihapus saat dipakai lagi | Scheduled job pembersih |
 | Notifikasi realtime | FE polling `/notifications` | WebSocket / Laravel Reverb |
@@ -381,6 +415,12 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Database | Migrasi lama digabung | `migrate:fresh --seed` menghapus data | Skrip migrasi data bila ada data produksi |
 | Data | Token idle menumpuk; file media tanpa antivirus & kebijakan retensi | Tabel & storage membesar | Job pembersih, kebijakan retensi |
 | Proses | Commit tidak ditandatangani; `test.md` (Apidog) belum diperbarui | Label "Unverified"; tester pakai endpoint lama | Signing bila wajib; perbarui `test.md` |
+| AI suara | Deteksi tembakan YAMNet belum diuji dengan rekaman nyata; gergaji mesin di bawah hujan deras terbaca `engine` (0,33), bukan `chainsaw` | Tembakan bisa terlewat atau salah kategori | Uji & kalibrasi ambang (`AI_THRESHOLD_*`) dengan rekaman lapangan |
+| Server tim (PC + tunnel) | URL `trycloudflare.com` berganti setiap tunnel dinyalakan ulang; server mati saat PC mati/tidur | Tim harus memperbarui `API_URL` | Domain sendiri (named tunnel) atau ngrok domain statis |
+| Server tim (PC + tunnel) | Akun seed `password123` bisa dicoba siapa pun yang tahu URL | Akses tidak sah | Ganti password akun seed sebelum URL dibagikan |
+| Server tim (PC + tunnel) | `php artisan serve` melayani satu request sekaligus | Request lain menunggu saat ada analisis AI | `AI_QUEUE=true` (FE polling) |
+| Antrean | `AI_QUEUE=true` butuh FE polling | Hasil AI tidak tampil bila FE tidak polling | Aktifkan setelah FE siap, atau tetap `false` |
+| Skrip Windows | `scripts/start-server.ps1` belum dicoba di Windows (lingkungan pengujian Linux) | Bisa gagal di PC | Laporkan error jendela PowerShell; perintah manual ada di `DEPLOY.md` |
 
 ---
 
@@ -397,7 +437,7 @@ php artisan migrate:fresh --seed
 php artisan serve
 ```
 
-Setiap kali menarik perubahan baru (wajib, agar data sesuai skema dan seed terbaru):
+Setiap kali menarik perubahan baru di PC pengembangan (data contoh diisi ulang):
 
 ```bash
 git pull origin main
@@ -406,5 +446,9 @@ php artisan migrate:fresh --seed
 php artisan config:clear
 ```
 
-`migrate:fresh --seed` menghapus seluruh data lalu mengisi ulang data contoh. Jalankan test dengan
+`migrate:fresh --seed` menghapus seluruh data lalu mengisi ulang data contoh. Di PC yang menjadi server tim,
+pakai `php artisan migrate` (data tim tetap ada) dan restart worker; lihat [`DEPLOY.md`](DEPLOY.md).
+Perubahan skema berikutnya selalu ditulis sebagai file migrasi baru.
+
+ai-service (sekali saja): lihat [`../ai-service/README.md`](../ai-service/README.md). Jalankan test dengan
 `php vendor/bin/phpunit`.

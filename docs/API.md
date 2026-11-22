@@ -32,6 +32,8 @@ Akun seed (password `password123`): `admin@`, `peneliti@`, `lapangan@`, `kebijak
   sesi. Aktivitas terakhir dicatat di cache (`CACHE_STORE`), dengan `last_used_at` sebagai cadangan.
 - Ekspor CSV: teks yang diawali `= + - @` diberi awalan `'` agar tidak dijalankan sebagai formula di Excel.
 - CORS: origin frontend diatur lewat `FRONTEND_URLS` (pisahkan dengan koma).
+- AI suara memakai ai-service YAMNet (`AI_AUDIO_SERVICE_URL`). Bila `AI_QUEUE=true`, upload/analisis membalas
+  `processing_status: "queued"`; polling `GET /ai-predictions/{id}` sampai selesai.
 - Relasi dikirim dengan nama camelCase sesuai frontend (`trackingDevice`, `predictedSpecies`, `weatherData`, ...).
 
 ## Perubahan skema (hasil audit)
