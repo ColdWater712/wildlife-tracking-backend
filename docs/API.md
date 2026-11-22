@@ -30,6 +30,8 @@ Akun seed (password `password123`): `admin@`, `peneliti@`, `lapangan@`, `kebijak
 - Sesi: token dicabut jika tidak dipakai lebih dari `API_IDLE_TIMEOUT` menit (default 120 = 2 jam);
   responsnya `401` dengan pesan "Sesi Anda telah berakhir...". Setiap request yang berhasil memperpanjang
   sesi. Aktivitas terakhir dicatat di cache (`CACHE_STORE`), dengan `last_used_at` sebagai cadangan.
+- Ekspor CSV: teks yang diawali `= + - @` diberi awalan `'` agar tidak dijalankan sebagai formula di Excel.
+- CORS: origin frontend diatur lewat `FRONTEND_URLS` (pisahkan dengan koma).
 - Relasi dikirim dengan nama camelCase sesuai frontend (`trackingDevice`, `predictedSpecies`, `weatherData`, ...).
 
 ## Perubahan skema (hasil audit)
@@ -66,6 +68,9 @@ Semua relasi antar tabel memakai ID (FK), bukan nama.
 | delete_data / manage_users / manage_roles | | | ✓ | |
 
 Permission disimpan di `role_permissions` dan bisa diubah admin lewat `/roles/{id}/permissions`.
+`create_data` = menambah data lapangan, `update_data` = mengubahnya (PUT insiden, keluar zona).
+Role bawaan (4 role di atas) tidak bisa diganti nama atau dihapus, dan admin tidak bisa mencabut
+`manage_roles` dari role-nya sendiri. User `nonaktif` langsung kehilangan akses (token ditolak `401`).
 
 ## Endpoint
 
@@ -100,12 +105,12 @@ Alias path: `devices` = `tracking-devices`, `incidents` = `incident-reports`,
 ### Telemetri & lapangan
 | Method | Path | Keterangan |
 |---|---|---|
-| POST | `/gps-readings` | ingest 1 titik; otomatis update geofence (masuk/keluar zona) + notifikasi zona rawan |
+| POST | `/gps-readings` | ingest 1 titik dari perangkat `device_type=gps`; otomatis update geofence (masuk/keluar zona) + notifikasi zona rawan; `battery_level`/`signal_strength` rendah memicu `device_alert` |
 | POST | `/gps-readings/bulk` | `{readings: [...]}`; duplikat (device, waktu) dilewati |
 | GET | `/gps-readings` | filter `device_id, animal_id, start_date, end_date, min_lat..max_lon, latest_only, limit` (default 2000 terbaru) |
 | GET | `/gps-readings/{id}`, `/gps-readings/{id}/weather` | |
 | GET/POST | `/animal-geo-zone-visits`, `PATCH /animal-geo-zone-visits/{id}/exit` | workflow kunjungan zona |
-| GET/POST | `/incidents`, `GET/PUT /incidents/{id}`, `DELETE` (admin), `PATCH /incidents/{id}/sync-status` (admin) | |
+| GET/POST | `/incidents`, `GET/PUT /incidents/{id}` (PUT: `update_data`), `DELETE` (admin), `PATCH /incidents/{id}/sync-status` (admin, permission `delete_data`) | |
 | GET/POST | `/incidents/{id}/media` | unggah bukti; `analyze=1` untuk langsung dianalisis AI |
 | GET | `/weather-data`, `/weather-data/{id}` | |
 | POST | `/weather-data/ingest`, `/weather-data/sync` | ingest manual / tarik dari Open-Meteo |
