@@ -1,9 +1,9 @@
 <?php
 
-use App\Http\Middleware\CheckApiSessionTimeout;
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\LogActivity;
+use App\Services\ApiSessionService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -28,7 +28,6 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => CheckRole::class,
             'permission' => CheckPermission::class,
             'log.activity' => LogActivity::class,
-            'api.timeout' => CheckApiSessionTimeout::class,
         ]);
 
         $middleware->redirectGuestsTo(fn () => null);
@@ -48,7 +47,17 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->render(function (AuthenticationException $e, Request $request) use ($json, $isApi) {
-            return $isApi($request) ? $json('Unauthenticated. Silakan login kembali.', 401) : null;
+            if (! $isApi($request)) {
+                return null;
+            }
+
+            if ($request->attributes->get(ApiSessionService::EXPIRED_ATTRIBUTE)) {
+                $minutes = (int) config('sanctum.idle_timeout', 120);
+
+                return $json("Sesi Anda telah berakhir karena tidak ada aktivitas selama {$minutes} menit. Silakan login kembali.", 401);
+            }
+
+            return $json('Unauthenticated. Silakan login kembali.', 401);
         });
 
         $exceptions->render(function (AuthorizationException $e, Request $request) use ($json, $isApi) {

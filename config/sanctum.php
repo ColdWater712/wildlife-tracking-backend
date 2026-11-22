@@ -54,6 +54,18 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Idle Timeout Minutes
+    |--------------------------------------------------------------------------
+    |
+    | Token dicabut jika tidak dipakai lebih lama dari nilai ini. Aktivitas
+    | terakhir dicatat di cache (lihat App\Services\ApiSessionService).
+    |
+    */
+
+    'idle_timeout' => (int) env('API_IDLE_TIMEOUT', 120),
+
+    /*
+    |--------------------------------------------------------------------------
     | Token Prefix
     |--------------------------------------------------------------------------
     |

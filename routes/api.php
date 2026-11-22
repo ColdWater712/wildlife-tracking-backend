@@ -40,7 +40,7 @@ $routes = function () {
         Route::post('auth/login', [AuthController::class, 'login']);
     });
 
-    Route::middleware(['auth:sanctum', 'api.timeout', 'log.activity'])->group(function () {
+    Route::middleware(['auth:sanctum', 'log.activity'])->group(function () {
 
         // ------------------------------------------------------------ Auth & profil
         Route::post('logout', [AuthController::class, 'logout']);

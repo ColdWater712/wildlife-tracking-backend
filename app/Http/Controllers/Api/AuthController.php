@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\ApiSessionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
@@ -49,7 +50,9 @@ class AuthController extends ApiController
         }
 
         $user->tokens()->where('name', 'api-token')->delete();
-        $token = $user->createToken('api-token')->plainTextToken;
+        $newToken = $user->createToken('api-token');
+        ApiSessionService::touch($newToken->accessToken);
+        $token = $newToken->plainTextToken;
 
         ActivityLog::record($user->user_id, 'LOGIN', ['ip' => $request->ip()]);
 
@@ -62,7 +65,9 @@ class AuthController extends ApiController
 
     public function logout(Request $request)
     {
-        $request->user()->currentAccessToken()?->delete();
+        $token = $request->user()->currentAccessToken();
+        ApiSessionService::forget($token?->id);
+        $token?->delete();
 
         return $this->success(null, 'Logout berhasil');
     }
@@ -70,8 +75,13 @@ class AuthController extends ApiController
     public function refresh(Request $request)
     {
         $user = $request->user()->load('role');
-        $request->user()->currentAccessToken()?->delete();
-        $token = $user->createToken('api-token')->plainTextToken;
+        $old = $request->user()->currentAccessToken();
+        ApiSessionService::forget($old?->id);
+        $old?->delete();
+
+        $newToken = $user->createToken('api-token');
+        ApiSessionService::touch($newToken->accessToken);
+        $token = $newToken->plainTextToken;
 
         return $this->success([
             'user' => self::presentUser($user),

@@ -27,6 +27,9 @@ Akun seed (password `password123`): `admin@`, `peneliti@`, `lapangan@`, `kebijak
 - Sort: `?orderBy=<kolom>&order=asc|desc` (kolom di-whitelist per endpoint).
 - Error: `401` belum login, `403` tidak punya permission, `404` data tidak ada, `409` bentrok
   relasi/duplikat, `422` validasi (`errors` berisi detail per field).
+- Sesi: token dicabut jika tidak dipakai lebih dari `API_IDLE_TIMEOUT` menit (default 120 = 2 jam);
+  responsnya `401` dengan pesan "Sesi Anda telah berakhir...". Setiap request yang berhasil memperpanjang
+  sesi. Aktivitas terakhir dicatat di cache (`CACHE_STORE`), dengan `last_used_at` sebagai cadangan.
 - Relasi dikirim dengan nama camelCase sesuai frontend (`trackingDevice`, `predictedSpecies`, `weatherData`, ...).
 
 ## Perubahan skema (hasil audit)
