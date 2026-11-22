@@ -112,14 +112,16 @@ def classify(class_names: list[str], clip_scores: list[float], peak_times: list[
         "species": species,
         "detected_at_seconds": at_seconds,
         "category_scores": {c: round(float(v[0]), 4) for c, v in best.items()},
+        "category_labels": {c: v[1] for c, v in best.items()},
+        "category_peaks": {c: round(peak_times[index[v[1]]], 2) for c, v in best.items() if v[1] in index},
     }
 
 
-def summary(result: dict, duration: float) -> str:
+def summary(result: dict, duration: float, engine: str = "YAMNet") -> str:
     label = LABELS_ID.get(result["category"], result["category"])
     if result["category"] == "unknown":
         return f"Rekaman {duration:.0f} detik tidak menunjukkan suara yang dikenali dengan yakin. Perlu verifikasi petugas."
     where = f" sekitar detik ke-{result['detected_at_seconds']:.0f}" if result.get("detected_at_seconds") is not None else ""
     species = f" (kemungkinan {result['species']})" if result.get("species") else ""
-    return (f"YAMNet mendeteksi {label}{species}{where} dari rekaman {duration:.0f} detik "
+    return (f"{engine} mendeteksi {label}{species}{where} dari rekaman {duration:.0f} detik "
             f"dengan keyakinan {result['confidence'] * 100:.0f}%. Perlu verifikasi petugas.")

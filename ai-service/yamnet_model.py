@@ -179,5 +179,9 @@ class YamnetModel:
 
     def scores(self, waveform: np.ndarray) -> np.ndarray:
         """Matriks skor (jumlah_frame, 521); tiap frame = jendela 0,96 detik bergeser 0,48 detik."""
-        scores, _, _ = self.model(np.asarray(waveform, dtype=np.float32))
-        return scores.numpy()
+        return self.analyze(waveform)[0]
+
+    def analyze(self, waveform: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """(skor (frame, 521), embedding (frame, 1024)) untuk satu rekaman."""
+        scores, embeddings, _ = self.model(np.asarray(waveform, dtype=np.float32))
+        return scores.numpy(), embeddings.numpy()

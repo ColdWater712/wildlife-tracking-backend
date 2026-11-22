@@ -1,5 +1,14 @@
+# Audio (YAMNet)
 tensorflow-cpu>=2.16
 tf-keras>=2.16
+# Gambar (SpeciesNet = MegaDetector + classifier spesies) dan re-identifikasi (MegaDescriptor)
+# Windows/Linux tanpa GPU: pasang torch versi CPU lebih dulu (lihat README) agar unduhan lebih kecil.
+torch>=2.2
+torchvision>=0.17
+speciesnet>=5.0.6
+timm>=1.0
+pillow>=10
+# Layanan
 numpy>=1.26
 fastapi>=0.110
 uvicorn[standard]>=0.29

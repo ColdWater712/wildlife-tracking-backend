@@ -1,25 +1,37 @@
-# ai-service (YAMNet, gratis)
+# ai-service (model AI terlatih, gratis, CPU)
 
-Layanan Python kecil untuk klasifikasi suara lapangan: tembakan, gergaji mesin, api, kayu patah,
-mesin, kendaraan, anjing, suara manusia, suara satwa, dan suara alam. Memakai model **YAMNet**
-(Google, Apache-2.0, 521 kelas AudioSet). Berjalan di CPU, sekitar 0,1–0,2 detik per rekaman 5 detik.
+Layanan Python yang menjalankan model terlatih untuk backend Laravel. Semua model gratis dan berjalan
+tanpa GPU. Hasil uji lengkap ada di [`training/README.md`](training/README.md).
 
-Backend Laravel memanggilnya lewat `AI_AUDIO_SERVICE_URL`. Bila layanan ini mati, backend otomatis
-kembali ke Groq / heuristik, jadi upload tidak pernah gagal karena ai-service.
+| Endpoint | Fungsi | Model |
+|---|---|---|
+| `POST /classify-audio` | Tembakan, gergaji mesin, api, mesin, kendaraan, anjing, suara manusia, suara satwa, suara alam | YAMNet (Google) + 2 classifier yang dilatih proyek ini |
+| `POST /analyze-image` | Deteksi satwa/manusia/kendaraan, jumlah individu, spesies, embedding individu | SpeciesNet v4.0.3a (MegaDetector v5a + classifier Google) + MegaDescriptor |
+| `POST /analyze-video` | Seperti gambar, untuk 1 frame tiap 2 detik (maks. 8 frame) | sama |
+| `POST /embed` | Embedding satwa terbesar di foto referensi | MegaDetector + MegaDescriptor |
+| `GET /health` | Status tiap model | |
+
+Laravel memanggilnya lewat `AI_AUDIO_SERVICE_URL` dan `AI_VISION_SERVICE_URL`. Bila ai-service mati,
+backend kembali ke Groq / heuristik, jadi upload tidak pernah gagal karenanya.
 
 ## Setup (sekali saja, Windows)
 
-Butuh Python 3.10–3.12 (64-bit). Dari folder `ai-service`:
+Butuh **Python 3.11 atau 3.12 (64-bit)**, sekitar 3 GB ruang disk, dan internet saat pertama kali.
+Dari folder `ai-service`:
 
 ```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 python download_model.py
 ```
 
-`download_model.py` mengunduh `models/yamnet.h5` (15 MB) dan `models/yamnet_class_map.csv` dari Google.
-Folder `models/` tidak ikut di-commit.
+- Baris `torch ... /whl/cpu` memasang PyTorch versi CPU (lebih kecil). Pasang ini **sebelum** requirements.
+- `download_model.py` mengunduh semua model (sekitar 800 MB) ke `models/` dari sumber resmi:
+  YAMNet (Google Storage), SpeciesNet (Kaggle Google), MegaDetector (GitHub agentmorris), MegaDescriptor (Hugging Face BVRA).
+  Folder `models/` tidak ikut di-commit.
+- Hanya butuh suara? `python download_model.py audio` (15 MB) dan jalankan dengan `AI_PRELOAD_VISION=0`.
 
 Linux/macOS: ganti dua baris pertama dengan `python3 -m venv .venv` dan `source .venv/bin/activate`.
 
@@ -30,71 +42,80 @@ Linux/macOS: ganti dua baris pertama dengan `python3 -m venv .venv` dan `source 
 uvicorn app:app --host 127.0.0.1 --port 8001
 ```
 
-Lalu di `.env` Laravel:
+Memuat semua model butuh ±30 detik dan ±2,5 GB RAM. Cek `http://127.0.0.1:8001/health`: ketiga model harus `"loaded": true`.
+
+`.env` Laravel:
 
 ```env
 AI_AUDIO_SERVICE_URL=http://127.0.0.1:8001
-AI_AUDIO_SERVICE_MODEL=yamnet-audioset-v1
+AI_AUDIO_SERVICE_MODEL=yamnet-audioset-v1+wt-heads-v1
+AI_VISION_SERVICE_URL=http://127.0.0.1:8001
+AI_COUNTRY=IDN
+AI_REID_THRESHOLD=0.6
 ```
 
-Cek: `GET http://127.0.0.1:8001/health` harus `{"status":"ok"}`, dan `GET /api/ai/health` di backend
-menampilkan `audio_service.reachable: true`.
+## Kecepatan (CPU)
 
-## Kontrak
+| Analisis | Waktu |
+|---|---|
+| Suara 5 detik | ±0,2 detik |
+| Foto kamera jebak | ±2,7 detik |
+| Video (8 frame) | ±15–20 detik |
+| Embedding individu | ±50 ms per satwa |
 
-`POST /classify-audio` (multipart `file`: wav, mp3, m4a, ogg, flac, webm, aac; maks. 50 MB, 10 menit pertama):
+Untuk banyak upload sekaligus, aktifkan antrean Laravel (`AI_QUEUE=true`).
+
+## Kontrak respons
+
+`POST /classify-audio` (multipart `file`):
 
 ```json
 {
-  "label": "gergaji mesin (Chainsaw)",
-  "category": "chainsaw",
-  "confidence": 0.9038,
+  "label": "tembakan / ledakan (Gunshot, gunfire)",
+  "category": "gunshot",
+  "confidence": 0.9196,
+  "decision_source": "gunshot_head",
+  "gunshot_probability": 0.9196,
+  "category_probabilities": {"environment": 0.71, "vehicle": 0.12},
+  "summary": "Model terlatih (YAMNet + classifier) mendeteksi tembakan / ledakan sekitar detik ke-1 ...",
+  "detected_at_seconds": 0.96,
   "species": null,
-  "summary": "YAMNet mendeteksi gergaji mesin sekitar detik ke-3 ...",
-  "detected_at_seconds": 2.88,
-  "duration_seconds": 5.0,
-  "predictions": [{"label": "Sawing", "score": 0.9038}],
-  "category_scores": {"gunshot": 0.01, "chainsaw": 0.9038},
-  "model": "yamnet-audioset-v1",
-  "processing_ms": 122
+  "model": "yamnet-audioset-v1+wt-heads-v1"
 }
 ```
 
-## Cara memutuskan kategori
+`POST /analyze-image` (multipart `file`, opsional `country` ISO-3, `embed`):
 
-Skor tiap kelas diambil dari puncaknya di sepanjang rekaman, karena tembakan hanya terdengar sesaat.
-Kategori ancaman dicek dulu sesuai prioritas (tembakan → gergaji → api → kayu patah → mesin → anjing →
-kendaraan → suara manusia) dan dipilih bila melewati ambangnya, walau suara hujan/serangga lebih keras.
-Bila tidak ada ancaman, dipilih kategori dengan skor tertinggi (suara satwa atau suara alam).
+```json
+{
+  "detections": [
+    {"category": "animal", "confidence": 0.98, "bbox": [0.66, 0.36, 0.34, 0.56],
+     "species": {"common_name": "sambar", "scientific_name": "Rusa unicolor", "rank": "species", "score": 0.9999},
+     "embedding": [0.012, -0.034, "... 768 angka"]}
+  ],
+  "animal_count": 1, "person_count": 0, "vehicle_count": 0,
+  "top_species": {"common_name": "sambar", "scientific_name": "Rusa unicolor", "rank": "species", "score": 0.9999},
+  "model": "speciesnet-v4.0.3a", "embedding_model": "MegaDescriptor-T-224"
+}
+```
 
-Ambang bisa diatur lewat variabel lingkungan sebelum menjalankan uvicorn, misalnya
-`AI_THRESHOLD_GUNSHOT=0.2`. Default: tembakan 0,25, gergaji 0,25, api 0,35, kayu patah 0,4,
-mesin/anjing/kendaraan 0,3, suara manusia 0,35, minimum 0,1.
+`bbox` = `[x, y, lebar, tinggi]` relatif 0–1. `top_species` memilih takson paling spesifik (spesies > genus > famili > ordo).
 
 ## Variabel lingkungan
 
 | Variabel | Default | Fungsi |
 |---|---|---|
 | `AI_SERVICE_TOKEN` | kosong | Bila diisi, request wajib header `X-Api-Key` (isi juga `AI_AUDIO_SERVICE_TOKEN` di Laravel) |
-| `AI_MODEL_DIR` | `./models` | Lokasi `yamnet.h5` dan class map |
+| `AI_COUNTRY` | `IDN` | Filter geografis SpeciesNet (spesies yang mustahil di Indonesia diturunkan ke takson lebih umum) |
+| `AI_DETECTION_THRESHOLD` | `0.2` | Ambang deteksi MegaDetector |
+| `AI_REID_MIN_DETECTION` | `0.5` | Embedding hanya dibuat untuk deteksi satwa ≥ nilai ini |
+| `AI_VIDEO_FRAME_INTERVAL` / `AI_VIDEO_MAX_FRAMES` | `2` / `8` | Pengambilan frame video |
+| `AI_PRELOAD_VISION` | `1` | `0` = model visual dimuat saat pertama dipakai |
+| `AI_MODEL_DIR` | `./models` | Lokasi semua model |
 | `AI_MAX_UPLOAD_MB` | `50` | Batas ukuran berkas |
-| `AI_MAX_AUDIO_SECONDS` | `600` | Hanya 10 menit pertama yang dianalisis |
-| `FFMPEG_PATH` | ffmpeg bawaan `imageio-ffmpeg` | Pakai ffmpeg sistem bila perlu |
 
-## Hasil uji
+## Lisensi model
 
-Diuji dengan bobot YAMNet asli pada klip ESC-50 dan sampel resmi YAMNet:
-
-| Rekaman | Hasil |
-|---|---|
-| Gergaji tangan | `chainsaw` 0,90 |
-| Gergaji mesin | `chainsaw` 0,41 |
-| Gergaji mesin tertutup hujan deras | `engine` 0,33 (tetap tertandai ancaman) |
-| Api berderak | `fire` 0,38 |
-| Anjing | `dog_bark` 0,72 |
-| Mesin mobil | `vehicle` 0,88 |
-| Hujan, angin | `environment` 0,95 / 0,92 |
-| Ayam jago (WAV & MP3), kucing | `animal_call` 0,90 / 0,97 |
-
-Tembakan belum diuji dengan rekaman nyata karena sampelnya tidak tersedia saat pengujian; uji dengan
-rekaman lapangan sebelum dipakai untuk patroli.
+YAMNet & SpeciesNet: Apache-2.0. MegaDetector: MIT. **MegaDescriptor: CC-BY-NC-4.0 (non-komersial)**:
+gratis untuk konservasi/riset/tugas kampus, tidak untuk produk komersial. Classifier suara proyek ini dilatih dari
+dataset CC-BY dan ESC-50 (CC-BY-NC).

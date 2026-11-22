@@ -21,11 +21,15 @@ def ffmpeg_path() -> str:
     return imageio_ffmpeg.get_ffmpeg_exe()
 
 
-def decode(path: str, sample_rate: int = 16000, max_seconds: float = 600.0) -> np.ndarray:
+def decode(path: str, sample_rate: int = 16000, max_seconds: float = 600.0, band_limit_hz: int | None = None) -> np.ndarray:
+    """`band_limit_hz` (mis. 4000): buang frekuensi di atas batas itu (resample ke 2x batas lalu kembali),
+    agar rekaman 8 kHz dan 16 kHz terlihat sama bagi detektor yang dilatih pada pita sempit."""
+    af = ["-af", f"aresample={band_limit_hz * 2},aresample={sample_rate}"] if band_limit_hz else []
     cmd = [
         ffmpeg_path(), "-nostdin", "-hide_banner", "-loglevel", "error",
         "-i", path,
         "-t", str(max_seconds),
+        *af,
         "-ac", "1", "-ar", str(sample_rate),
         "-f", "f32le", "-acodec", "pcm_f32le", "pipe:1",
     ]
