@@ -2,29 +2,48 @@
 
 namespace App\Services\Ai;
 
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
- * Analisis gambar kamera jebak: spesies, jumlah individu, kondisi fisik,
- * perilaku, ciri pembeda individu, serta tanda aktivitas manusia/ancaman.
+ * Analisis gambar/video kamera jebak.
+ *
+ * Bila ai-service visual dikonfigurasi (AI_VISION_SERVICE_URL), bagian yang sudah ada model terlatihnya
+ * memakai model tersebut:
+ *  - deteksi satwa/manusia/kendaraan + jumlah individu  -> MegaDetector v5a
+ *  - spesies                                            -> SpeciesNet (classifier Google, ~2.500 label)
+ *  - embedding re-identifikasi individu                 -> MegaDescriptor
+ * Kondisi fisik, perilaku, ciri pembeda, dan tanda senjata/jerat/penebangan/api belum punya model terlatih
+ * publik, jadi tetap dari Groq vision (bila dikonfigurasi) dengan konteks hasil deteksi di atas.
+ * Tanpa ai-service, seluruh analisis memakai Groq vision seperti sebelumnya.
  */
 class VisionAnalyzer
 {
     public function __construct(
         private GroqClient $groq,
         private SpeciesMatcher $matcher,
+        private WildlifeVisionClient $models,
     ) {}
 
     public function modelVersion(): string
     {
+        if ($this->models->isConfigured()) {
+            return 'speciesnet-v4.0.3a' . ($this->groq->isConfigured() ? '+groq:' . $this->groq->visionModel() : '');
+        }
+
         return 'groq:' . $this->groq->visionModel();
     }
 
     /**
      * @param  array{zone_name?: ?string, zone_type?: ?string, captured_at?: ?string, device?: ?string}  $context
+     * @param  string|null  $videoPath  video asli (bila media berupa video) agar beberapa frame dianalisis
      */
-    public function analyze(string $imagePath, array $context = []): array
+    public function analyze(string $imagePath, array $context = [], ?string $videoPath = null): array
     {
+        if ($this->models->isConfigured() && ($videoPath || is_file($imagePath))) {
+            return $this->analyzeWithModels($imagePath, $context, $videoPath);
+        }
+
         if (! is_file($imagePath)) {
             throw new RuntimeException('File gambar tidak ditemukan.');
         }
@@ -38,7 +57,123 @@ class VisionAnalyzer
         return $this->normalize($result['json'], $result['raw']);
     }
 
-    private function prompt(array $context): string
+    private function analyzeWithModels(string $imagePath, array $context, ?string $videoPath): array
+    {
+        $det = $videoPath ? $this->models->analyzeVideo($videoPath) : $this->models->analyzeImage($imagePath);
+        $detections = is_array($det['detections'] ?? null) ? $det['detections'] : [];
+        $top = is_array($det['top_species'] ?? null) ? $det['top_species'] : null;
+        $animals = (int) ($det['animal_count'] ?? 0);
+
+        $species = $top ? $this->matcher->matchTaxon($top['scientific_name'] ?? null, $top['rank'] ?? null, $top['genus'] ?? null) : null;
+        $withEmbedding = collect($detections)->filter(fn ($d) => ($d['category'] ?? null) === 'animal' && ! empty($d['embedding']));
+        $primary = $withEmbedding->sortByDesc('confidence')->first();
+
+        // Bagian tanpa model terlatih publik: tanyakan ke Groq dengan konteks deteksi.
+        $groq = null;
+        $groqError = null;
+        if ($this->groq->isConfigured() && is_file($imagePath)) {
+            try {
+                $result = $this->groq->chatJson(
+                    [$this->groq->imageMessage($this->prompt($context, $this->detectionContext($det)), $imagePath)],
+                    $this->groq->visionModel(),
+                    1500,
+                );
+                $groq = $this->normalize($result['json'], $result['raw']);
+            } catch (\Throwable $e) {
+                $groqError = $e->getMessage();
+                Log::warning('Groq vision (kondisi/perilaku) gagal; hasil model terlatih tetap dipakai', ['error' => $e->getMessage()]);
+            }
+        }
+
+        $flags = $groq['human_activity'] ?? array_fill_keys(['weapons', 'traps_or_snares', 'logging', 'fire_or_smoke'], false) + ['notes' => null];
+        $flags['humans_present'] = (int) ($det['person_count'] ?? 0) > 0;
+        $flags['vehicles'] = (int) ($det['vehicle_count'] ?? 0) > 0;
+
+        $animalDetected = $animals > 0;
+        $commonName = $top['common_name'] ?? null;
+
+        return [
+            'animal_detected' => $animalDetected,
+            'species_common_name' => $commonName ? ucfirst($commonName) : null,
+            'species_scientific_name' => $top['scientific_name'] ?? null,
+            'species' => $species,
+            'confidence' => round((float) ($top['score'] ?? ($detections[0]['confidence'] ?? 0)), 4),
+            'individual_count' => $animals,
+            'physical_condition' => $animalDetected ? ($groq['physical_condition'] ?? 'unknown') : null,
+            'condition_notes' => $groq['condition_notes'] ?? null,
+            'behavior' => $animalDetected ? ($groq['behavior'] ?? 'unknown') : null,
+            'behavior_notes' => $groq['behavior_notes'] ?? null,
+            'distinctive_features' => $groq['distinctive_features'] ?? null,
+            'human_activity' => $flags,
+            'objects' => $this->objectsFromDetections($detections),
+            'summary' => $groq['summary'] ?? $this->summaryFromDetections($det, $commonName),
+            'embedding' => $primary['embedding'] ?? null,
+            'embedding_bbox' => $primary['bbox'] ?? null,
+            'embedding_model' => $det['embedding_model'] ?? null,
+            'raw' => [
+                'engine' => 'speciesnet+megadetector' . ($groq ? '+groq' : ''),
+                'detector' => collect($detections)->map(fn ($d) => array_diff_key($d, ['embedding' => 1]))->values()->all(),
+                'top_species' => $top,
+                'counts' => ['animal' => $animals, 'person' => (int) ($det['person_count'] ?? 0), 'vehicle' => (int) ($det['vehicle_count'] ?? 0)],
+                'video_frames' => $det['frames'] ?? null,
+                'groq' => $groq['raw'] ?? null,
+                'groq_error' => $groqError,
+            ],
+        ];
+    }
+
+    private function detectionContext(array $det): string
+    {
+        $top = $det['top_species'] ?? null;
+        $species = $top ? sprintf('%s (%s, skor %.0f%%)', $top['common_name'] ?? '?', $top['scientific_name'] ?? '?', ($top['score'] ?? 0) * 100) : 'tidak teridentifikasi';
+
+        return sprintf(
+            'Model deteksi terlatih (MegaDetector + SpeciesNet) sudah menemukan: %d satwa, %d manusia, %d kendaraan. Spesies: %s. '
+            . 'Gunakan ini sebagai fakta untuk jumlah dan spesies; fokuskan analisis pada kondisi fisik, perilaku, ciri pembeda individu, '
+            . 'serta tanda senjata, jerat, penebangan, atau api/asap.',
+            (int) ($det['animal_count'] ?? 0), (int) ($det['person_count'] ?? 0), (int) ($det['vehicle_count'] ?? 0), $species,
+        );
+    }
+
+    private function objectsFromDetections(array $detections): array
+    {
+        $label = fn ($d) => match ($d['category'] ?? null) {
+            'person' => 'manusia',
+            'vehicle' => 'kendaraan',
+            default => $d['species']['common_name'] ?? 'satwa',
+        };
+
+        return collect($detections)->take(30)->map(fn ($d) => [
+            'label' => $label($d),
+            'score' => round((float) ($d['confidence'] ?? 0), 4),
+            'box' => isset($d['bbox'][3]) ? [
+                'xmin' => round($d['bbox'][0] * 100, 2),
+                'ymin' => round($d['bbox'][1] * 100, 2),
+                'xmax' => round(($d['bbox'][0] + $d['bbox'][2]) * 100, 2),
+                'ymax' => round(($d['bbox'][1] + $d['bbox'][3]) * 100, 2),
+            ] : null,
+        ])->values()->all();
+    }
+
+    private function summaryFromDetections(array $det, ?string $common): string
+    {
+        $parts = [];
+        if (($n = (int) ($det['animal_count'] ?? 0)) > 0) {
+            $parts[] = $n . ' satwa' . ($common ? " ({$common})" : '');
+        }
+        if (($n = (int) ($det['person_count'] ?? 0)) > 0) {
+            $parts[] = "{$n} manusia";
+        }
+        if (($n = (int) ($det['vehicle_count'] ?? 0)) > 0) {
+            $parts[] = "{$n} kendaraan";
+        }
+
+        return $parts
+            ? 'Model terlatih mendeteksi ' . implode(', ', $parts) . '. Kondisi fisik dan perilaku belum dinilai (Groq tidak dikonfigurasi).'
+            : 'Model terlatih tidak mendeteksi satwa, manusia, maupun kendaraan pada gambar ini.';
+    }
+
+    private function prompt(array $context, ?string $detections = null): string
     {
         $species = $this->matcher->promptList() ?: '- (belum ada data spesies)';
         $where = trim(sprintf(
@@ -55,6 +190,7 @@ Lokasi: {$where}. Waktu pengambilan: {$when}. Sumber: {$device}.
 
 Spesies yang dipantau di sistem (prioritaskan jika cocok):
 {$species}
+{$detections}
 
 Analisis gambar dan balas HANYA satu objek JSON valid dengan kunci berikut:
 {

@@ -31,6 +31,7 @@ class AiInsightController extends ApiController
             'success' => $groq->isConfigured(),
             'ai_service' => $groq->healthCheck(),
             'audio_service' => $this->audioServiceHealth(),
+            'vision_service' => $this->visionServiceHealth(),
             'queue' => config('services.ai.queue') ? 'enabled (butuh queue:work)' : 'disabled (analisis langsung)',
             'timestamp' => now()->toIso8601String(),
         ]);
@@ -106,6 +107,27 @@ class AiInsightController extends ApiController
             return ['url' => $url, 'reachable' => $res->successful(), 'status' => $res->json('status'), 'model' => $res->json('model')];
         } catch (\Throwable) {
             return ['url' => $url, 'reachable' => false, 'status' => 'unreachable', 'model' => null];
+        }
+    }
+
+    private function visionServiceHealth(): array|string
+    {
+        $url = (string) config('services.ai_vision.url');
+        if ($url === '') {
+            return 'not_configured (memakai Groq vision)';
+        }
+
+        try {
+            $res = \Illuminate\Support\Facades\Http::timeout(3)->get(rtrim($url, '/') . '/health');
+
+            return [
+                'url' => $url,
+                'reachable' => $res->successful(),
+                'detector_species' => $res->json('models.vision'),
+                'reidentification' => $res->json('models.reid'),
+            ];
+        } catch (\Throwable) {
+            return ['url' => $url, 'reachable' => false, 'detector_species' => null, 'reidentification' => null];
         }
     }
 }

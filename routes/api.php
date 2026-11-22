@@ -104,6 +104,8 @@ $routes = function () {
             Route::get('animals/{animalId}/zone-visits', [AnimalController::class, 'zoneVisits']);
             Route::get('animals/{animalId}/incidents', [AnimalController::class, 'incidents']);
             Route::get('animals/{animalId}/ai-observations', [AnimalController::class, 'aiObservations']);
+            Route::get('animals/{animalId}/reference-photos', [AnimalController::class, 'referencePhotos']);
+            Route::get('animals/{animalId}/reference-photos/{embeddingId}/file', [AnimalController::class, 'referencePhotoFile']);
 
             foreach (['devices', 'tracking-devices'] as $prefix) {
                 Route::get($prefix, [TrackingDeviceController::class, 'index']);
@@ -148,6 +150,8 @@ $routes = function () {
             Route::put('animals/{id}', [AnimalController::class, 'update']);
             Route::patch('animals/{id}/status', [AnimalController::class, 'updateStatus']);
             Route::delete('animals/{id}', [AnimalController::class, 'destroy']);
+            Route::post('animals/{animalId}/reference-photos', [AnimalController::class, 'storeReferencePhoto']);
+            Route::delete('animals/{animalId}/reference-photos/{embeddingId}', [AnimalController::class, 'destroyReferencePhoto']);
 
             foreach (['devices', 'tracking-devices'] as $prefix) {
                 Route::post($prefix, [TrackingDeviceController::class, 'store']);

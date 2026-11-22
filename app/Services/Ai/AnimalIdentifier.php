@@ -3,6 +3,7 @@
 namespace App\Services\Ai;
 
 use App\Models\Animal;
+use App\Models\AnimalEmbedding;
 use App\Models\AnimalGeoZone;
 use App\Models\GpsReading;
 use App\Models\Species;
@@ -14,7 +15,8 @@ use Carbon\CarbonInterface;
  *  - kedekatan posisi GPS kalung satwa dengan lokasi perangkat pada waktu pengambilan,
  *  - satwa yang tercatat berada di zona yang sama (animal_geo_zones),
  *  - kecocokan ciri fisik pembeda (animals.distinctive_marks),
- *  - satu-satunya individu aktif dari spesies tersebut.
+ *  - satu-satunya individu aktif dari spesies tersebut,
+ *  - kemiripan penampilan (re-identifikasi MegaDescriptor) dengan galeri foto referensi/terverifikasi satwa.
  */
 class AnimalIdentifier
 {
@@ -28,7 +30,7 @@ class AnimalIdentifier
     /**
      * @return array{animal: ?Animal, confidence: ?float, method: ?string, candidates: array}
      */
-    public function identify(?Species $species, ?float $lat, ?float $lon, ?int $zoneId, CarbonInterface $at, ?string $features = null): array
+    public function identify(?Species $species, ?float $lat, ?float $lon, ?int $zoneId, CarbonInterface $at, ?string $features = null, ?array $embedding = null): array
     {
         $empty = ['animal' => null, 'confidence' => null, 'method' => null, 'candidates' => []];
 
@@ -46,7 +48,9 @@ class AnimalIdentifier
             return $empty;
         }
 
-        $scored = $candidates->map(function (Animal $animal) use ($lat, $lon, $zoneId, $at, $features, $candidates) {
+        $appearance = $embedding ? $this->appearanceScores($embedding, $candidates->pluck('animal_id')->all()) : [];
+
+        $scored = $candidates->map(function (Animal $animal) use ($lat, $lon, $zoneId, $at, $features, $candidates, $appearance) {
             $evidence = [];
             $score = 0.0;
 
@@ -84,12 +88,29 @@ class AnimalIdentifier
                 }
             }
 
+            if (isset($appearance[$animal->animal_id])) {
+                $similarity = $appearance[$animal->animal_id];
+                $evidence['appearance_similarity'] = round($similarity, 4);
+                $threshold = (float) config('services.ai_vision.reid_threshold', 0.6);
+                if ($similarity >= $threshold) {
+                    // >= ambang: 0,5 (di ambang) sampai 1,0 (identik). Diuji pada ATRW (lihat ai-service/training).
+                    $reid = 0.5 + 0.5 * ($similarity - $threshold) / max(0.01, 1 - $threshold);
+                    $score += $reid;
+                    $evidence['appearance_reid'] = round($reid, 3);
+                } else {
+                    // Galeri ada tetapi penampilannya tidak cocok: bukti GPS/zona saja tidak cukup.
+                    $score *= 0.5;
+                    $evidence['appearance_mismatch'] = true;
+                }
+            }
+
             return [
                 'animal' => $animal,
+                'raw' => $score,
                 'score' => round(min(0.99, $score), 4),
                 'evidence' => $evidence,
             ];
-        })->sortByDesc('score')->values();
+        })->sortByDesc('raw')->values();
 
         $best = $scored->first();
         $second = $scored->get(1);
@@ -100,12 +121,12 @@ class AnimalIdentifier
             'evidence' => $c['evidence'],
         ])->take(5)->all();
 
-        $margin = $best['score'] - ($second['score'] ?? 0);
+        $margin = $best['raw'] - ($second['raw'] ?? 0);
         if ($best['score'] < self::MIN_SCORE || ($second && $margin < self::MIN_MARGIN)) {
             return ['animal' => null, 'confidence' => null, 'method' => null, 'candidates' => $summary];
         }
 
-        $evidence = array_intersect_key($best['evidence'], array_flip(['gps_proximity', 'zone_presence', 'distinctive_marks', 'single_candidate']));
+        $evidence = array_intersect_key($best['evidence'], array_flip(['appearance_reid', 'gps_proximity', 'zone_presence', 'distinctive_marks', 'single_candidate']));
         arsort($evidence);
 
         return [
@@ -114,6 +135,26 @@ class AnimalIdentifier
             'method' => array_key_first($evidence),
             'candidates' => $summary,
         ];
+    }
+
+    /**
+     * Kemiripan tertinggi embedding dengan galeri tiap kandidat (foto referensi & deteksi terverifikasi).
+     *
+     * @return array<int, float> animal_id => kemiripan kosinus
+     */
+    private function appearanceScores(array $embedding, array $animalIds): array
+    {
+        $best = [];
+        AnimalEmbedding::query()
+            ->whereIn('animal_id', $animalIds)
+            ->whereIn('source', ['reference', 'verified'])
+            ->get(['animal_id', 'vector'])
+            ->each(function (AnimalEmbedding $g) use ($embedding, &$best) {
+                $s = AnimalEmbedding::similarity($embedding, (array) $g->vector);
+                $best[$g->animal_id] = max($best[$g->animal_id] ?? -1.0, $s);
+            });
+
+        return $best;
     }
 
     private function nearestReading(int $deviceId, CarbonInterface $at): ?GpsReading

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\ActivityLog;
 use App\Models\AiMediaUpload;
 use App\Models\AiPrediction;
+use App\Models\AnimalEmbedding;
 use App\Services\AiPredictionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -129,6 +130,14 @@ class AiPredictionController extends ApiController
                 'verified_by' => $request->user()->user_id,
                 'verified_at' => now(),
             ]);
+
+            // Deteksi yang dikonfirmasi sebagai individu tertentu masuk galeri re-identifikasi satwa tsb.
+            $confirmedAnimal = $data['verification_status'] === 'confirmed' ? ($data['verified_animal_id'] ?? null) : null;
+            AnimalEmbedding::where('prediction_id', $prediction->prediction_id)
+                ->whereIn('source', ['detection', 'verified'])
+                ->update($confirmedAnimal
+                    ? ['animal_id' => $confirmedAnimal, 'source' => 'verified', 'species_id' => $data['verified_species_id'] ?? null]
+                    : ['animal_id' => null, 'source' => 'detection']);
 
             ActivityLog::record($request->user()->user_id, 'VERIFY_AI_PREDICTION', [
                 'prediction_id' => $prediction->prediction_id,

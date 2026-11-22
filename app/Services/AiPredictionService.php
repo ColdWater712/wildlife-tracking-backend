@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Jobs\ProcessAiMedia;
 use App\Models\AiMediaUpload;
+use App\Models\AnimalEmbedding;
 use App\Models\AiPrediction;
 use App\Models\TrackingDevice;
 use App\Services\Ai\AnalysisVocabulary;
@@ -40,6 +41,9 @@ class AiPredictionService
     public static function mediaTypeFromMime(?string $mime): ?string
     {
         return match (true) {
+            // Beberapa kamera menghasilkan MP4/OGG yang dikenali finfo sebagai application/*.
+            in_array($mime, ['application/mp4', 'application/x-matroska'], true) => 'video',
+            in_array($mime, ['application/ogg', 'application/x-flac'], true) => 'audio',
             str_starts_with((string) $mime, 'image/') => 'image',
             str_starts_with((string) $mime, 'video/') => 'video',
             str_starts_with((string) $mime, 'audio/') => 'audio',
@@ -54,7 +58,8 @@ class AiPredictionService
     public function storeMedia(UploadedFile $file, array $attrs): AiMediaUpload
     {
         $mime = $file->getMimeType();
-        $type = self::mediaTypeFromMime($mime) ?? throw new RuntimeException('Tipe berkas tidak didukung.');
+        $type = self::mediaTypeFromMime($mime)
+            ?? throw \Illuminate\Validation\ValidationException::withMessages(['file' => ["Isi berkas tidak dikenali sebagai gambar, video, atau audio ({$mime})."]]);
 
         $device = isset($attrs['device_id']) ? TrackingDevice::find($attrs['device_id']) : null;
         $lat = $attrs['latitude'] ?? $device?->latitude;
@@ -143,13 +148,22 @@ class AiPredictionService
         $tempFrame = null;
         try {
             if ($media->media_type === 'video') {
-                $tempFrame = $this->extractVideoFrame($path);
-                $path = $tempFrame;
+                try {
+                    $tempFrame = $this->extractVideoFrame($path);
+                    $path = $tempFrame;
+                } catch (RuntimeException $e) {
+                    // ai-service punya ffmpeg sendiri: video tetap dianalisis model terlatih, hanya Groq yang dilewati.
+                    if (! app(\App\Services\Ai\WildlifeVisionClient::class)->isConfigured()) {
+                        throw $e;
+                    }
+                    $path = '';
+                }
             }
 
+            $videoPath = $media->media_type === 'video' ? Storage::disk(self::DISK)->path($media->file_path) : null;
             $attributes = $analysisType === 'audio'
                 ? $this->fromAudio($this->audio->analyze($path, $context), $media)
-                : $this->fromVision($this->vision->analyze($path, $context), $media);
+                : $this->fromVision($this->vision->analyze($path, $context, $videoPath), $media);
         } catch (\Throwable $e) {
             Log::error('Analisis AI gagal', ['media_id' => $media->media_id, 'error' => $e->getMessage()]);
             $attributes = [
@@ -166,7 +180,11 @@ class AiPredictionService
 
         $attributes += ['analysis_type' => $analysisType, 'processed_at' => now()];
 
+        $embedding = $attributes['_embedding'] ?? null;
+        unset($attributes['_embedding']);
+
         $prediction = $this->save($media, $attributes, $existing);
+        $this->storeEmbedding($prediction, $media, $embedding);
 
         if ($prediction->processing_status === 'completed') {
             try {
@@ -186,6 +204,7 @@ class AiPredictionService
             $media->latitude, $media->longitude, $media->zone_id,
             $media->captured_at ?? now(),
             $r['distinctive_features'],
+            $r['embedding'] ?? null,
         );
 
         $flags = $r['human_activity'];
@@ -198,7 +217,7 @@ class AiPredictionService
         );
 
         $status = match (true) {
-            $r['animal_detected'] && $r['species'] !== null => 'completed',
+            $r['animal_detected'] && ($r['species'] !== null || ($r['species_common_name'] ?? null) !== null) => 'completed',
             ! $r['animal_detected'] && AiPrediction::threatRank($threat) > 0 => 'completed',
             default => 'unrecognized',
         };
@@ -227,7 +246,30 @@ class AiPredictionService
                 'identification_candidates' => $identity['candidates'],
                 'model_output' => $r['raw'],
             ],
+            '_embedding' => isset($r['embedding']) ? [
+                'vector' => $r['embedding'], 'bbox' => $r['embedding_bbox'] ?? null, 'model' => $r['embedding_model'] ?? 'MegaDescriptor-T-224',
+                'species_id' => $r['species']?->species_id,
+            ] : null,
         ];
+    }
+
+    /** Simpan embedding deteksi utama; menjadi galeri individu setelah diverifikasi petugas. */
+    private function storeEmbedding(AiPrediction $prediction, AiMediaUpload $media, ?array $embedding): void
+    {
+        AnimalEmbedding::where('prediction_id', $prediction->prediction_id)->where('source', 'detection')->delete();
+        if (! $embedding || empty($embedding['vector'])) {
+            return;
+        }
+
+        AnimalEmbedding::create([
+            'prediction_id' => $prediction->prediction_id,
+            'media_id' => $media->media_id,
+            'species_id' => $embedding['species_id'],
+            'source' => 'detection',
+            'model' => mb_substr((string) $embedding['model'], 0, 100),
+            'vector' => array_map('floatval', $embedding['vector']),
+            'bbox' => $embedding['bbox'],
+        ]);
     }
 
     private function fromAudio(array $r, AiMediaUpload $media): array

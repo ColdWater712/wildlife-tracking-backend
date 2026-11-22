@@ -19,7 +19,7 @@ class AppServiceProvider extends ServiceProvider
     {
         // Parameter ID selalu numerik agar tidak bentrok dengan path statis
         // seperti /notifications/unread-count atau /ai-predictions/pending-verification.
-        foreach (['id', 'animalId', 'deviceId', 'readingId', 'mediaId', 'permissionId', 'tokenId'] as $param) {
+        foreach (['id', 'animalId', 'deviceId', 'readingId', 'mediaId', 'permissionId', 'tokenId', 'embeddingId'] as $param) {
             Route::pattern($param, '[0-9]+');
         }
 

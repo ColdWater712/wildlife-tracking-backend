@@ -71,4 +71,10 @@ class Animal extends Model
     {
         return $this->hasMany(AiPrediction::class, 'predicted_animal_id', 'animal_id');
     }
+
+    /** Galeri re-identifikasi: foto referensi & deteksi terverifikasi. */
+    public function embeddings()
+    {
+        return $this->hasMany(AnimalEmbedding::class, 'animal_id', 'animal_id');
+    }
 }

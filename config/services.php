@@ -51,6 +51,16 @@ return [
         'queue' => (bool) env('AI_QUEUE', false),
     ],
 
+    // ai-service visual (SpeciesNet + MegaDescriptor). Biasanya URL yang sama dengan ai_audio.
+    'ai_vision' => [
+        'url' => env('AI_VISION_SERVICE_URL'),
+        'token' => env('AI_VISION_SERVICE_TOKEN', env('AI_AUDIO_SERVICE_TOKEN')),
+        'timeout' => (int) env('AI_VISION_SERVICE_TIMEOUT', 180),
+        'country' => env('AI_COUNTRY', 'IDN'),
+        // Kemiripan kosinus minimum agar dua foto dianggap individu yang sama (diuji pada ATRW: 0,6).
+        'reid_threshold' => (float) env('AI_REID_THRESHOLD', 0.6),
+    ],
+
     'ai_audio' => [
         'url' => env('AI_AUDIO_SERVICE_URL'),
         'token' => env('AI_AUDIO_SERVICE_TOKEN'),

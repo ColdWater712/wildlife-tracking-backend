@@ -4,6 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\AiPrediction;
 use App\Models\Animal;
+use App\Models\AnimalEmbedding;
+use App\Services\Ai\WildlifeVisionClient;
+use Illuminate\Support\Facades\Storage;
 use App\Models\AnimalGeoZone;
 use App\Models\GpsReading;
 use App\Models\IncidentReport;
@@ -175,5 +178,85 @@ class AnimalController extends ApiController
         }
 
         return $data;
+    }
+
+    /** Galeri re-identifikasi satwa (foto referensi + deteksi terverifikasi), tanpa vektor. */
+    public function referencePhotos(int $animalId)
+    {
+        Animal::findOrFail($animalId);
+
+        return $this->list(AnimalEmbedding::query()
+            ->where('animal_id', $animalId)
+            ->whereIn('source', ['reference', 'verified'])
+            ->orderByDesc('created_at'));
+    }
+
+    /**
+     * Unggah foto referensi individu (mis. foto saat pemasangan kalung). Satwa terbesar di foto
+     * dipotong otomatis lalu diubah menjadi embedding MegaDescriptor untuk re-identifikasi.
+     */
+    public function storeReferencePhoto(Request $request, WildlifeVisionClient $models, int $animalId)
+    {
+        $animal = Animal::findOrFail($animalId);
+        $request->validate(['file' => 'required|file|mimes:jpg,jpeg,png,webp|max:20480']);
+
+        if (! $models->isConfigured()) {
+            return $this->error('ai-service visual belum dikonfigurasi (AI_VISION_SERVICE_URL).', 503);
+        }
+
+        $path = $request->file('file')->store("reference-photos/{$animal->animal_id}", 'local');
+        try {
+            $result = $models->embed(Storage::disk('local')->path($path));
+        } catch (\Throwable $e) {
+            Storage::disk('local')->delete($path);
+
+            return $this->error('Foto tidak dapat diproses ai-service: ' . $e->getMessage(), 502);
+        }
+
+        $embedding = AnimalEmbedding::create([
+            'animal_id' => $animal->animal_id,
+            'species_id' => $animal->species_id,
+            'source' => 'reference',
+            'model' => mb_substr((string) ($result['embedding_model'] ?? 'MegaDescriptor-T-224'), 0, 100),
+            'vector' => array_map('floatval', $result['embedding'] ?? []),
+            'bbox' => $result['bbox'] ?? null,
+            'file_path' => $path,
+            'created_by' => $request->user()->user_id,
+        ]);
+
+        return $this->success([
+            'reference' => $embedding,
+            'animal_detected' => $result['bbox'] !== null,
+            'detection_confidence' => $result['detection_confidence'] ?? null,
+            'detected_species' => $result['species'] ?? null,
+        ], $result['bbox'] !== null
+            ? 'Foto referensi disimpan; satwa terdeteksi dan dipakai untuk re-identifikasi.'
+            : 'Foto referensi disimpan, namun tidak ada satwa terdeteksi sehingga seluruh foto dipakai.', 201);
+    }
+
+    public function referencePhotoFile(int $animalId, int $embeddingId)
+    {
+        $ref = AnimalEmbedding::where('animal_id', $animalId)->whereNotNull('file_path')->findOrFail($embeddingId);
+        $disk = Storage::disk('local');
+
+        return $disk->exists($ref->file_path)
+            ? $disk->response($ref->file_path, basename($ref->file_path), ['X-Content-Type-Options' => 'nosniff'])
+            : $this->error('Berkas tidak ditemukan', 404);
+    }
+
+    public function destroyReferencePhoto(int $animalId, int $embeddingId)
+    {
+        $ref = AnimalEmbedding::where('animal_id', $animalId)->whereIn('source', ['reference', 'verified'])->findOrFail($embeddingId);
+
+        if ($ref->source === 'verified') {
+            $ref->update(['animal_id' => null, 'source' => 'detection']);
+        } else {
+            if ($ref->file_path) {
+                Storage::disk('local')->delete($ref->file_path);
+            }
+            $ref->delete();
+        }
+
+        return $this->success(null, 'Dihapus dari galeri re-identifikasi');
     }
 }

@@ -86,6 +86,36 @@ class SpeciesMatcher
         return null;
     }
 
+    /**
+     * Pencocokan ketat untuk takson dari model terlatih (SpeciesNet), tanpa kamus sinonim:
+     *  1. nama ilmiah spesies sama / subspesies dari spesies itu (Panthera tigris -> Panthera tigris sumatrae),
+     *  2. satu genus dengan tepat satu spesies di master data (Pongo pygmaeus -> Pongo abelii).
+     */
+    public function matchTaxon(?string $scientific, ?string $rank = null, ?string $genus = null): ?Species
+    {
+        $scientific = mb_strtolower(trim((string) $scientific));
+        if ($scientific === '') {
+            return null;
+        }
+        $species = $this->all();
+
+        if ($rank === 'species') {
+            $hit = $species->first(fn (Species $s) => ($name = mb_strtolower($s->scientific_name)) === $scientific
+                || str_starts_with($name, $scientific . ' '));
+            if ($hit) {
+                return $hit;
+            }
+        }
+
+        $genus = mb_strtolower(trim((string) ($genus ?: ($rank === 'genus' ? $scientific : explode(' ', $scientific)[0]))));
+        if ($genus === '' || ! in_array($rank, ['species', 'genus'], true)) {
+            return null;
+        }
+        $sameGenus = $species->filter(fn (Species $s) => explode(' ', mb_strtolower($s->scientific_name))[0] === $genus);
+
+        return $sameGenus->count() === 1 ? $sameGenus->first() : null;
+    }
+
     /** Daftar spesies untuk konteks prompt AI. */
     public function promptList(): string
     {
