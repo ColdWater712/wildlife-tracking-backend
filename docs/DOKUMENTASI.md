@@ -1,6 +1,6 @@
 # Dokumentasi Backend Wildlife Tracking
 
-Diperbarui: 2026-11-22 · Laravel 13 + Sanctum · 168 endpoint REST (juga di `/api/v1`) · 63 test lulus.
+Diperbarui: 2026-11-22 · Laravel 13 + Sanctum · 168 endpoint REST (juga di `/api/v1`) · 74 test lulus.
 
 Dokumen ini adalah rujukan utama untuk tim frontend dan backend: fitur yang sudah siap, cara memanggilnya,
 apa yang berubah di setiap rilis, fitur yang masih dikembangkan, dan hasil audit terakhir.
@@ -82,6 +82,32 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 ## 2. Apa yang diubah
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
+
+### Rilis model AI terlatih: suara, kamera jebak, identifikasi individu (2026-11-22)
+
+Semua fitur AI utama kini memakai model yang **sudah terlatih dan teruji pada data nyata**, bukan tebakan LLM.
+Detail data, metode, dan angka uji: [`ai-service/training/README.md`](../ai-service/training/README.md).
+
+| Area | Sebelum | Sesudah | Hasil uji (data yang tidak dipakai latihan) |
+|---|---|---|---|
+| Klasifikasi suara | Aturan zero-shot YAMNet | YAMNet + **classifier yang dilatih proyek ini** (ESC-50, rekaman hutan Vietnam, Lund) | Akurasi 96,1% (2.548 klip) |
+| Tembakan | Zero-shot: 11% tertangkap di hutan, petir 72% terbaca tembakan | **Detektor tembakan terlatih** (pita 0–4 kHz) + veto suara alam/manusia | 85% tertangkap, alarm palsu 1,3%; 97% pada 10–350 m (Lund) |
+| Deteksi satwa/manusia/kendaraan + jumlah individu | Tebakan Groq vision | **MegaDetector v5a** | 86/90 foto bersatwa terdeteksi, 0/20 foto kosong salah |
+| Spesies | Tebakan Groq vision | **SpeciesNet v4.0.3a** (Google), geofence Indonesia | Sambar 14/15, babi hutan 13/15, kijang 17/20 (foto Laos/Vietnam) |
+| Identifikasi individu | GPS/zona/kata ciri fisik | + **re-identifikasi penampilan MegaDescriptor** dengan galeri foto per satwa | Top-1 97,9% (107 harimau); individu baru 86,5% tidak dipaksa cocok |
+| Video | 1 frame | 1 frame tiap 2 detik (maks. 8), hasil paling spesifik dipakai | – |
+| Kondisi fisik, perilaku, senjata/jerat/penebangan/api | Groq vision | Tetap Groq vision, kini dengan konteks hasil deteksi (belum ada model terlatih publik) | Belum diukur |
+
+Endpoint baru: `GET/POST /animals/{id}/reference-photos`, `GET /animals/{id}/reference-photos/{embeddingId}/file`,
+`DELETE /animals/{id}/reference-photos/{embeddingId}`. Verifikasi prediksi dengan `verified_animal_id` otomatis
+menambah foto ke galeri individu. `animal_match_method` bisa bernilai `appearance_reid`.
+
+Perbaikan ikut ditemukan saat pengujian: MP4 yang dikenali sistem sebagai `application/mp4` dulu ditolak (kini
+diterima); berkas yang isinya bukan gambar/video/audio dulu `500` (kini `422`); urutan kandidat individu tidak lagi
+terpotong batas 0,99.
+
+Migrasi baru: `2026_11_22_000002_create_animal_embeddings_table`. Variabel baru: `AI_VISION_SERVICE_URL`,
+`AI_COUNTRY`, `AI_REID_THRESHOLD`. Test baru: `VisionModelsIntegrationTest` (11 test).
 
 ### Rilis AI suara nyata (YAMNet) & antrean AI (2026-11-22)
 
@@ -289,7 +315,8 @@ langsung membuat insiden dan notifikasi; semua hasil tetap menunggu verifikasi p
 | Field prediksi | Isi |
 |---|---|
 | `predicted_species_id`, `confidence` | Spesies + keyakinan 0–1 |
-| `predicted_animal_id`, `animal_match_confidence`, `animal_match_method` | Individu: `gps_proximity`, `zone_presence`, `distinctive_marks`, `single_candidate` |
+| `predicted_animal_id`, `animal_match_confidence`, `animal_match_method` | Individu: `appearance_reid`, `gps_proximity`, `zone_presence`, `distinctive_marks`, `single_candidate` |
+| `individual_count`, `detected_objects` | Jumlah satwa & kotak deteksi MegaDetector (persen gambar) |
 | `physical_condition`, `condition_notes` | `healthy`, `injured`, `sick`, `emaciated`, `unknown` |
 | `behavior`, `behavior_notes` | `foraging`, `resting`, `moving`, `running`, `drinking`, `social`, `parenting`, `mating`, `alert`, `aggressive`, `unknown` |
 | `sound_category`, `sound_label` | `animal_call`, `gunshot`, `chainsaw`, `tree_falling`, `fire`, `engine`, `vehicle`, `human_voice`, `dog_bark`, `environment`, `unknown` |
@@ -297,7 +324,25 @@ langsung membuat insiden dan notifikasi; semua hasil tetap menunggu verifikasi p
 | `processing_status` | `completed`, `unrecognized`, `failed` |
 
 Label bahasa Indonesia tersedia di `GET /ai/vocabulary`. Individu dipilih bila skornya ≥ 0,35 dan unggul ≥ 0,1
-dari kandidat kedua (jarak kalung GPS ±6 jam, zona yang sama, ciri fisik, kandidat tunggal).
+dari kandidat kedua. Bukti: kemiripan penampilan dengan galeri satwa (MegaDescriptor; ≥ 0,6 menambah 0,5–1,0,
+di bawah 0,6 dengan galeri yang ada membagi dua skor), jarak kalung GPS ±6 jam, zona yang sama, ciri fisik,
+kandidat tunggal. Daftar kandidat & bukti ada di `raw_response.identification_candidates`.
+
+Galeri re-identifikasi tiap satwa (perlu `AI_VISION_SERVICE_URL`):
+
+| Method | Path | Izin | Keterangan |
+|---|---|---|---|
+| GET | `/animals/{id}/reference-photos` | `view_data` | Foto referensi + deteksi terverifikasi (tanpa vektor) |
+| POST | `/animals/{id}/reference-photos` | `manage_master_data` | Multipart `file` (jpg/png/webp, maks. 20 MB). Satwa terbesar dipotong otomatis |
+| GET | `/animals/{id}/reference-photos/{embeddingId}/file` | `view_data` | Berkas foto referensi |
+| DELETE | `/animals/{id}/reference-photos/{embeddingId}` | `manage_master_data` | Keluarkan dari galeri |
+
+```ts
+// daftarkan 3-5 foto jelas tiap individu (mis. saat pemasangan kalung)
+const form = new FormData();
+form.append("file", photo);
+await api.post(`/animals/${animalId}/reference-photos`, { formData: form, timeoutMs: 60_000 });
+```
 
 | Deteksi | Tingkat | Insiden dibuat |
 |---|---|---|
@@ -331,12 +376,15 @@ const res = await api.post("/ai/upload", { formData: form, timeoutMs: 120_000 })
 
 Engine:
 
-| Analisis | Engine utama | Cadangan |
+| Analisis | Engine utama (terlatih, ai-service) | Cadangan |
 |---|---|---|
-| Gambar (spesies, kondisi, perilaku, aktivitas manusia) | Groq vision (`GROQ_VISION_MODEL`) | — (status `failed`, bisa retry) |
+| Deteksi satwa/manusia/kendaraan, jumlah individu | MegaDetector v5a (`AI_VISION_SERVICE_URL`) | Groq vision |
+| Spesies dari gambar | SpeciesNet v4.0.3a, geofence `AI_COUNTRY` | Groq vision |
+| Identifikasi individu | MegaDescriptor-T-224 + GPS/zona | GPS/zona/ciri fisik saja |
+| Kondisi fisik, perilaku, senjata/jerat/penebangan/api | Groq vision dengan konteks deteksi (belum ada model terlatih) | `unknown` bila Groq tidak dikonfigurasi |
+| Suara | YAMNet + classifier & detektor tembakan terlatih (`AI_AUDIO_SERVICE_URL`) | Groq Whisper + LLM, lalu aturan ciri akustik WAV |
+| Video | 1 frame tiap 2 detik (maks. 8) di ai-service | 1 frame via `ffmpeg` + Groq |
 | Ringkasan laporan | Groq teks (`GROQ_TEXT_MODEL`) | Ringkasan statistik tanpa AI |
-| Suara | **ai-service YAMNet** (`AI_AUDIO_SERVICE_URL`, gratis, lokal) | Groq Whisper + LLM, lalu aturan ciri akustik WAV |
-| Video | 1 frame via `ffmpeg`, lalu analisis gambar | — |
 
 Mode antrean (`AI_QUEUE=true`): semua endpoint upload/analisis mengembalikan prediksi `queued`; jalankan
 `php artisan queue:work --queue=ai,default`. Status berjalan `queued` → `processing` → `completed`/`unrecognized`/`failed`.
@@ -357,10 +405,11 @@ while (p.processing_status === "queued" || p.processing_status === "processing")
 | Fitur | Kondisi sekarang | Rencana |
 |---|---|---|
 | CRUD AI lanjutan | Upload, analisis, retry, verifikasi, hapus | Koreksi manual, riwayat versi prediksi, statistik akurasi per spesies |
-| Deteksi satwa kamera jebak | Groq vision | MegaDetector (gratis) di ai-service untuk kotak objek & jumlah individu |
-| Spesies dari gambar | Groq vision | SpeciesNet (gratis); cek label satwa Sumatra, fine-tune bila perlu |
-| Re-identifikasi individu dari foto | Skor GPS/zona/ciri fisik | MegaDescriptor (gratis, non-komersial) + galeri foto per individu |
-| Suara burung | YAMNet hanya "Bird" | BirdNET (gratis, non-komersial) |
+| Kondisi fisik & perilaku terlatih | Groq vision (tebakan LLM, wajib diverifikasi) | Latih classifier dari prediksi yang diverifikasi petugas (data terkumpul di `ai_predictions`) |
+| Spesies Sumatra spesifik | SpeciesNet: orangutan hanya *P. pygmaeus*, harimau tanpa subspesies; badak/gajah/orangutan belum diuji foto Sumatra | Fine-tune dengan foto kamera jebak Sumatra (mis. dari TNGL/WCS) |
+| Tembakan jauh di hutan lebat | 63% tertangkap pada rekaman Vietnam | Tambah rekaman tembakan dari lokasi sendiri lalu latih ulang (`ai-service/training`) |
+| Pohon tumbang | Aturan zero-shot YAMNet (tidak ada data latih) | Kumpulkan rekaman lalu latih |
+| Suara burung per spesies | Kategori umum "suara satwa" | BirdNET (gratis, non-komersial) |
 | Token khusus perangkat | Perangkat memakai token user biasa (ikut timeout 2 jam) | Token Sanctum ber-ability per perangkat tanpa timeout idle |
 | Pembersihan token | Token idle dihapus saat dipakai lagi | Scheduled job pembersih |
 | Notifikasi realtime | FE polling `/notifications` | WebSocket / Laravel Reverb |
@@ -415,7 +464,12 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Database | Migrasi lama digabung | `migrate:fresh --seed` menghapus data | Skrip migrasi data bila ada data produksi |
 | Data | Token idle menumpuk; file media tanpa antivirus & kebijakan retensi | Tabel & storage membesar | Job pembersih, kebijakan retensi |
 | Proses | Commit tidak ditandatangani; `test.md` (Apidog) belum diperbarui | Label "Unverified"; tester pakai endpoint lama | Signing bila wajib; perbarui `test.md` |
-| AI suara | Deteksi tembakan YAMNet belum diuji dengan rekaman nyata; gergaji mesin di bawah hujan deras terbaca `engine` (0,33), bukan `chainsaw` | Tembakan bisa terlewat atau salah kategori | Uji & kalibrasi ambang (`AI_THRESHOLD_*`) dengan rekaman lapangan |
+| AI suara | Tembakan jauh di hutan lebat: 63% (Vietnam) dan 1/6 pada rekaman malam kontinu; kembang api sering terbaca tembakan | Tembakan bisa terlewat | Latih ulang dengan rekaman lokasi sendiri (`ai-service/training`) |
+| AI gambar | Spesies Sumatra (badak, gajah, orangutan) belum diuji dengan foto Sumatra; makaka & kancil sering hanya tingkat famili | Spesies bisa kosong/umum | Uji & fine-tune dengan foto kamera jebak Sumatra |
+| AI gambar | Kondisi fisik, perilaku, senjata/jerat/penebangan/api masih dari Groq (LLM), bukan model terlatih | Bisa salah/halusinasi | Wajib verifikasi petugas; latih model dari data verifikasi |
+| Re-identifikasi | Akurasi diukur pada harimau (ATRW, kemungkinan bagian data latih model); individu baru 13,5% masih bisa salah cocok | Salah individu | Daftarkan 3–5 foto jelas per satwa; naikkan `AI_REID_THRESHOLD` ke 0,7 bila salah cocok sering terjadi |
+| Lisensi | MegaDescriptor & ESC-50 non-komersial (CC-BY-NC) | Tidak boleh untuk produk komersial | Ganti model bila proyek dikomersialkan |
+| Sumber daya | ai-service dengan semua model butuh ±2,5 GB RAM dan ±3 GB disk; foto ±2,7 detik di CPU | PC lambat saat banyak upload | `AI_QUEUE=true` |
 | Server tim (PC + tunnel) | URL `trycloudflare.com` berganti setiap tunnel dinyalakan ulang; server mati saat PC mati/tidur | Tim harus memperbarui `API_URL` | Domain sendiri (named tunnel) atau ngrok domain statis |
 | Server tim (PC + tunnel) | Akun seed `password123` bisa dicoba siapa pun yang tahu URL | Akses tidak sah | Ganti password akun seed sebelum URL dibagikan |
 | Server tim (PC + tunnel) | `php artisan serve` melayani satu request sekaligus | Request lain menunggu saat ada analisis AI | `AI_QUEUE=true` (FE polling) |

@@ -32,7 +32,8 @@ Akun seed (password `password123`): `admin@`, `peneliti@`, `lapangan@`, `kebijak
   sesi. Aktivitas terakhir dicatat di cache (`CACHE_STORE`), dengan `last_used_at` sebagai cadangan.
 - Ekspor CSV: teks yang diawali `= + - @` diberi awalan `'` agar tidak dijalankan sebagai formula di Excel.
 - CORS: origin frontend diatur lewat `FRONTEND_URLS` (pisahkan dengan koma).
-- AI suara memakai ai-service YAMNet (`AI_AUDIO_SERVICE_URL`). Bila `AI_QUEUE=true`, upload/analisis membalas
+- AI memakai model terlatih di ai-service: suara (YAMNet + classifier, `AI_AUDIO_SERVICE_URL`), gambar/video
+  (MegaDetector + SpeciesNet, `AI_VISION_SERVICE_URL`), identifikasi individu (MegaDescriptor). Bila `AI_QUEUE=true`, upload/analisis membalas
   `processing_status: "queued"`; polling `GET /ai-predictions/{id}` sampai selesai.
 - Relasi dikirim dengan nama camelCase sesuai frontend (`trackingDevice`, `predictedSpecies`, `weatherData`, ...).
 
@@ -100,7 +101,7 @@ Alias path: `devices` = `tracking-devices`, `incidents` = `incident-reports`,
 | Resource | Endpoint |
 |---|---|
 | Species | `GET/POST /species`, `GET/PUT/DELETE /species/{id}` (hapus ditolak 409 jika masih punya satwa) |
-| Animals | `GET/POST /animals`, `GET/PUT/DELETE /animals/{id}`, `PATCH /animals/{id}/status`, `GET /animals/{id}/track`, `/zone-visits`, `/incidents`, `/ai-observations` |
+| Animals | `GET/POST /animals`, `GET/PUT/DELETE /animals/{id}`, `PATCH /animals/{id}/status`, `GET /animals/{id}/track`, `/zone-visits`, `/incidents`, `/ai-observations`, `GET/POST /animals/{id}/reference-photos`, `DELETE /animals/{id}/reference-photos/{embeddingId}` (galeri re-identifikasi) |
 | Devices | `GET/POST /devices` (`?device_type=gps,camera,audio`), `GET/PUT/DELETE /devices/{id}`, `PATCH/DELETE /devices/{id}/assign-animal`, `PATCH /devices/{id}/condition`, `/status`, `/telemetry`, `GET /devices/{id}/latest-reading`, `/gps-readings`, `/battery-history`, `/captures`, `POST /devices/{id}/captures` |
 | Geo zones | `GET/POST /geo-zones`, `GET/PUT/DELETE /geo-zones/{id}`, `GET /geo-zones/{id}/animals` (`?history=1`), `/visits`, `/devices`, `GET /geo-zones/locate?lat=&lon=` |
 

@@ -24,7 +24,9 @@ Batasan: server hanya bisa diakses selama PC menyala, tidak tidur, dan terhubung
    QUEUE_CONNECTION=database
    AI_QUEUE=true
    AI_AUDIO_SERVICE_URL=http://127.0.0.1:8001
-   AI_AUDIO_SERVICE_MODEL=yamnet-audioset-v1
+   AI_AUDIO_SERVICE_MODEL=yamnet-audioset-v1+wt-heads-v1
+   AI_VISION_SERVICE_URL=http://127.0.0.1:8001
+   AI_COUNTRY=IDN
    FRONTEND_URLS=http://localhost:3000,http://127.0.0.1:3000
    ```
 
