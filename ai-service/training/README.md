@@ -9,7 +9,7 @@ bukan acak per klip, agar tidak bocor). Diuji 2026-11-22 di CPU.
 |---|---|---|---|
 | Kategori suara | YAMNet + classifier terlatih (`heads/category_head.npz`) | Dilatih proyek ini | Akurasi 96,1% (2.548 klip) |
 | Tembakan | YAMNet pita 0–4 kHz + detektor terlatih (`heads/gunshot_head.npz`) | Dilatih proyek ini | 85% tertangkap, 1,3% alarm palsu dari suara alam/satwa |
-| Deteksi satwa/manusia/kendaraan | MegaDetector v5a | Microsoft / agentmorris (MIT) | 86/90 foto bersatwa terdeteksi, 0/20 foto kosong salah deteksi |
+| Deteksi satwa/manusia/kendaraan | MegaDetector v5a | Microsoft / agentmorris (MIT) | 79/90 (88%) foto bersatwa terdeteksi, 0/20 foto kosong salah deteksi |
 | Spesies | SpeciesNet v4.0.3a | Google (Apache-2.0) | Lihat tabel per spesies |
 | Identifikasi individu | MegaDescriptor-T-224 | WildlifeDatasets (CC-BY-NC-4.0) | Top-1 97,9% (107 harimau) |
 
@@ -108,6 +108,34 @@ ATRW (107 harimau, 1.887 foto), 53 ms/foto:
 
 Catatan: ATRW kemungkinan termasuk data latih MegaDescriptor, jadi angka ini optimistis. Corak harimau sangat
 khas; untuk orangutan/gajah/badak akurasinya perlu diukur dengan foto individu nyata.
+
+## Pengukuran ulang dengan kode produksi (2026-11-22)
+
+Diukur ulang memakai modul yang benar-benar dipakai ai-service (`audio_pipeline.classify`, `vision.VisionModel`,
+`reid.ReidModel`), bukan skrip latihan. Skrip: `eval_*` di folder ini.
+
+Suara (2.548 klip uji, 0,3 detik/klip):
+
+| Kategori | Tertangkap (recall) | Presisi |
+|---|---|---|
+| Tembakan | 74/87 (85%) | 74/99 (75%) |
+| Gergaji mesin | 14/16 (88%) | 14/14 (100%) |
+| Api | 6/8 (75%) | 6/8 (75%) |
+| Mesin | 8/8 (100%) | 8/10 (80%) |
+| Kendaraan | 17/24 (71%) | 17/24 (71%) |
+| Anjing | 8/8 (100%) | 8/9 (89%) |
+| Suara manusia | 60/64 (94%) | 60/66 (91%) |
+| Suara satwa | 268/282 (95%) | 268/299 (90%) |
+| Suara alam | 1.994/2.051 (97%) | 1.994/2.018 (99%) |
+
+Tembakan per jarak (Lund): 10 m 21/21, 50 m 22/22, 150 m 11/12, 350 m 7/7. Kelas ESC-50 yang paling lemah:
+kicau burung 2/8 (sering terbaca suara alam), pesawat 3/8, angin 4/8.
+
+Kamera jebak (110 foto SWG): satwa terdeteksi 79/90 (88%), spesies tepat 52/90 (58%), benar minimal di tingkat
+genus/famili 70/90 (78%), foto kosong 20/20 benar.
+
+Re-identifikasi (ATRW, rata-rata 5 pembagian acak, galeri 3 foto/individu, ambang 0,6): dikenali benar 93,0%,
+salah individu 3,4%, individu baru ditolak 86,2%.
 
 ## Belum ada model terlatih
 

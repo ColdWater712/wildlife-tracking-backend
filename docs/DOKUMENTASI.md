@@ -92,7 +92,7 @@ Detail data, metode, dan angka uji: [`ai-service/training/README.md`](../ai-serv
 |---|---|---|---|
 | Klasifikasi suara | Aturan zero-shot YAMNet | YAMNet + **classifier yang dilatih proyek ini** (ESC-50, rekaman hutan Vietnam, Lund) | Akurasi 96,1% (2.548 klip) |
 | Tembakan | Zero-shot: 11% tertangkap di hutan, petir 72% terbaca tembakan | **Detektor tembakan terlatih** (pita 0–4 kHz) + veto suara alam/manusia | 85% tertangkap, alarm palsu 1,3%; 97% pada 10–350 m (Lund) |
-| Deteksi satwa/manusia/kendaraan + jumlah individu | Tebakan Groq vision | **MegaDetector v5a** | 86/90 foto bersatwa terdeteksi, 0/20 foto kosong salah |
+| Deteksi satwa/manusia/kendaraan + jumlah individu | Tebakan Groq vision | **MegaDetector v5a** | 79/90 (88%) foto bersatwa terdeteksi, 0/20 foto kosong salah |
 | Spesies | Tebakan Groq vision | **SpeciesNet v4.0.3a** (Google), geofence Indonesia | Sambar 14/15, babi hutan 13/15, kijang 17/20 (foto Laos/Vietnam) |
 | Identifikasi individu | GPS/zona/kata ciri fisik | + **re-identifikasi penampilan MegaDescriptor** dengan galeri foto per satwa | Top-1 97,9% (107 harimau); individu baru 86,5% tidak dipaksa cocok |
 | Video | 1 frame | 1 frame tiap 2 detik (maks. 8), hasil paling spesifik dipakai | – |
