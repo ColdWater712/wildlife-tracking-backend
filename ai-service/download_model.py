@@ -64,9 +64,21 @@ def reid() -> None:
 
 def main(argv: list[str]) -> int:
     targets = argv or ["audio", "vision", "reid"]
+    failed = {}
     for t in targets:
-        {"audio": audio, "vision": vision, "reid": reid}[t]()
-    print("Selesai. Jalankan: uvicorn app:app --host 127.0.0.1 --port 8001")
+        try:
+            {"audio": audio, "vision": vision, "reid": reid}[t]()
+        except Exception as e:  # lanjutkan model lain, laporkan di akhir
+            failed[t] = f"{type(e).__name__}: {e}"
+            print(f"[GAGAL] {t}: {failed[t]}")
+
+    print()
+    for t in targets:
+        print(f"  {t:7s} {'GAGAL - ' + failed[t] if t in failed else 'OK'}")
+    if failed:
+        print("\nSebagian model gagal. Perbaiki error di atas lalu jalankan lagi (yang sudah OK tidak diunduh ulang).")
+        return 1
+    print("\nSelesai. Jalankan: uvicorn app:app --host 127.0.0.1 --port 8001")
     return 0
 
 
