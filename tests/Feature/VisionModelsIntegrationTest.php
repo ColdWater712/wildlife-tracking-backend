@@ -254,7 +254,8 @@ class VisionModelsIntegrationTest extends TestCase
 
         $this->post('/api/ai/upload', ['file' => $this->photo()], $this->h)
             ->assertCreated()
-            ->assertJsonPath('data.prediction.processing_status', 'completed');
+            ->assertJsonPath('data.prediction.processing_status', 'completed')
+            ->assertJsonPath('data.prediction.model_version', 'groq:' . config('services.groq.vision_model'));
     }
 
     public function test_unreachable_ai_service_without_groq_explains_cause(): void

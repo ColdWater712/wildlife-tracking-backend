@@ -62,7 +62,8 @@ class VisionAnalyzer
             1500,
         );
 
-        return $this->normalize($result['json'], $result['raw']);
+        // model_version jujur: hasil ini dari Groq saja, bukan SpeciesNet.
+        return $this->normalize($result['json'], $result['raw']) + ['model_version' => 'groq:' . $this->groq->visionModel()];
     }
 
     private function analyzeWithModels(string $imagePath, array $context, ?string $videoPath): array

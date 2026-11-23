@@ -246,7 +246,7 @@ class AiPredictionService
         };
 
         return [
-            'model_version' => mb_substr($this->vision->modelVersion() . ($audio ? '+yamnet' : ''), 0, 100),
+            'model_version' => mb_substr(($r['model_version'] ?? $this->vision->modelVersion()) . ($audio ? '+yamnet' : ''), 0, 100),
             'processing_status' => $status,
             'predicted_species_id' => $r['species']?->species_id,
             'confidence' => $r['confidence'],

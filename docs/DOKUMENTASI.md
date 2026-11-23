@@ -88,6 +88,7 @@ Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh -
 | Fitur | Sebelum | Sesudah | Dampak ke FE |
 |---|---|---|---|
 | Upload gambar/video saat ai-service (port 8001) belum jalan | Langsung `processing_status: failed` dengan pesan koneksi mentah | Gambar dianalisis Groq sebagai cadangan (`completed`, tanpa wajah staf/re-ID). Bila Groq juga tidak diisi, `ai_summary` menjelaskan: "ai-service tidak bisa dihubungi ... Jalankan uvicorn di port 8001." | Tidak ada; respons sama |
+| `model_version` saat fallback | Tetap `speciesnet-v4.0.3a+groq:…` walau SpeciesNet tidak dipakai | `groq:<model>` (ditambah `+yamnet` bila ada audio video) | Bisa dipakai FE untuk menandai "hasil cadangan" |
 | `scripts/setup-ai-service.ps1` | Cek akhir hanya audio, vision, reid | Cek akhir juga memuat `faces` | Tidak ada |
 
 Error ai-service selain koneksi (mis. HTTP 503, file rusak) tetap menandai prediksi `failed` agar bisa di-retry.
@@ -456,7 +457,7 @@ while (p.processing_status === "queued" || p.processing_status === "processing")
 | Token khusus perangkat | Perangkat memakai token user biasa (ikut timeout 2 jam) | Token Sanctum ber-ability per perangkat tanpa timeout idle |
 | Pembersihan token | Token idle dihapus saat dipakai lagi | Scheduled job pembersih |
 | Notifikasi realtime | FE polling `/notifications` | WebSocket / Laravel Reverb |
-| Analisis video penuh | 1 frame (detik ke-1) | Beberapa frame, deteksi gerakan |
+| Analisis video penuh | 1 frame tiap 2 detik (maks. 8) + trek suara | Deteksi gerakan, frame lebih rapat untuk video pendek |
 | Riwayat baterai | `battery-history` = nilai terakhir | Tabel riwayat telemetri |
 | Laporan PDF | CSV | PDF siap cetak |
 | Halaman FE fitur baru | Belum ada halaman user, role, kamera/audio, ancaman AI, kondisi satwa, ekspor | Dikerjakan tim FE |
@@ -465,7 +466,7 @@ while (p.processing_status === "queued" || p.processing_status === "processing")
 
 ## 7. Hasil audit
 
-Audit terakhir: 2026-11-22. Cakupan: keamanan, validasi, kesesuaian fitur dengan dokumen ini, logika backend,
+Audit terakhir: 2026-11-23. Cakupan: keamanan, validasi, kesesuaian fitur dengan dokumen ini, logika backend,
 integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dibuktikan dulu dengan test.
 
 ### Sudah diperbaiki
@@ -486,6 +487,9 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | 12 | Integrasi | Origin CORS tertulis di kode | `FRONTEND_URLS` di `.env` |
 | 13 | Keamanan | File media tanpa `nosniff` | Header ditambahkan |
 | 14 | Keamanan | Timeout sesi 2 jam tidak berjalan (rilis sebelumnya) | Diperbaiki di `970a24f` |
+| 15 | Integrasi | ai-service mati → semua upload gambar/video langsung `failed` | Fallback ke Groq; pesan jelas bila Groq juga tidak ada |
+| 16 | Konsistensi | `model_version` hasil fallback Groq tetap tertulis `speciesnet` | `groq:<model>` |
+| 17 | Kesesuaian fitur | Galeri wajah, double-count staf per video, `application/mp4`, upload berisi file rusak `500` (rilis wajah) | Diperbaiki & dites di `FaceRecognitionAndRecapTest` |
 
 ### Masih berisiko / perlu keputusan
 
@@ -517,7 +521,8 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Server tim (PC + tunnel) | Akun seed `password123` bisa dicoba siapa pun yang tahu URL | Akses tidak sah | Ganti password akun seed sebelum URL dibagikan |
 | Server tim (PC + tunnel) | `php artisan serve` melayani satu request sekaligus | Request lain menunggu saat ada analisis AI | `AI_QUEUE=true` (FE polling) |
 | Antrean | `AI_QUEUE=true` butuh FE polling | Hasil AI tidak tampil bila FE tidak polling | Aktifkan setelah FE siap, atau tetap `false` |
-| Skrip Windows | `scripts/start-server.ps1` belum dicoba di Windows (lingkungan pengujian Linux) | Bisa gagal di PC | Laporkan error jendela PowerShell; perintah manual ada di `DEPLOY.md` |
+| Galeri wajah staf | `migrate:fresh --seed` mengosongkan `staff_faces`; foto & embedding sengaja tidak di repo | Semua staf terbaca "Tidak dikenal" setelah fresh | Di server pakai `migrate --force`; setelah fresh jalankan `php artisan staff:import-faces <folder> --replace` |
+| Fallback Groq | Saat ai-service mati, wajah staf tidak dicocokkan dan orang di gambar dinilai Groq | Staf bisa memicu "aktivitas manusia"; spesies kurang akurat | Pastikan jendela ai-service jalan; `retry` prediksi setelah ai-service hidup (`model_version` diawali `groq:`) |
 | Wajah staf | Foto staf dengan wajah menyamping/gelap kadang tidak dikenali (3/19 di uji) dan menjadi "kemungkinan"/tidak dikenal | Staf ditandai pengunjung | Daftarkan 10+ foto per staf dari berbagai sudut & cahaya, termasuk dari kamera lapangan |
 | Wajah staf | Kamera jebak sering menangkap wajah kecil/menyamping/malam (IR); uji hanya memakai foto ponsel & LFW | Pengenalan di lapangan lebih rendah | Uji dengan rekaman kamera sungguhan; ambang bisa diubah lewat `AI_FACE_THRESHOLD` |
 | Privasi | Embedding & foto wajah adalah data biometrik | Risiko hukum (UU PDP) | Persetujuan tertulis staf; galeri hanya untuk admin (sudah), hapus data staf yang keluar (`DELETE /staff-faces`) |
