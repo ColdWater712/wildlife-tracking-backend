@@ -83,6 +83,13 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
 
+### Setup ai-service sekali jalan (2026-11-23)
+
+`scripts/setup-ai-service.ps1` memastikan Python 3.12, membuat `ai-service\.venv`, memasang paket yang kurang, mengunduh
+model yang belum ada, lalu mengecek ketiga model (audio, vision, reid) bisa dimuat. `reverse_geocoder` (dependensi
+SpeciesNet yang terlewat di Windows) kini tercantum di `requirements.txt`, dan `download_model.py` tetap mengunduh model
+lain bila satu gagal lalu menampilkan ringkasan OK/GAGAL. Tidak ada perubahan API atau database.
+
 ### Perbaikan skrip server tim (2026-11-23)
 
 `scripts/start-server.ps1` sekarang menemukan `cloudflared` yang dipasang winget di `Program Files` walau tidak ada di PATH

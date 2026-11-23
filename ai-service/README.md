@@ -16,6 +16,14 @@ backend kembali ke Groq / heuristik, jadi upload tidak pernah gagal karenanya.
 
 ## Setup (sekali saja, Windows)
 
+Cara tercepat, dari root repo (bisa diulang kapan saja untuk memperbaiki setup):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\setup-ai-service.ps1
+```
+
+Langkah manual yang setara:
+
 Butuh **Python 3.11 atau 3.12 (64-bit)**, sekitar 3 GB ruang disk, dan internet saat pertama kali.
 Dari folder `ai-service`:
 
