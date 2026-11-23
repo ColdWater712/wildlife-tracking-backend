@@ -22,6 +22,9 @@ HUMAN_VOICE_VETO = 0.5
 # Aturan zero-shot YAMNet untuk tembakan (kelas Gunshot/Explosion) hanya dipakai bila classifier kategori
 # tidak yakin >= nilai ini bahwa suara adalah suara alam (mencegah petir terbaca tembakan).
 ENVIRONMENT_VETO = 0.7
+# Bila veto suara manusia aktif tetapi detektor tembakan sangat yakin, hasil ditandai "kemungkinan tembakan"
+# (tembakan beruntun mirip tepuk tangan bagi model; tidak ada data latih tembakan beruntun).
+POSSIBLE_GUNSHOT = 0.9
 
 
 def features(scores: np.ndarray, embeddings: np.ndarray) -> np.ndarray:

@@ -6,7 +6,7 @@ import numpy as np
 
 import audio_io
 import categories
-from audio_heads import ENVIRONMENT_VETO, HUMAN_VOICE_VETO, AudioHeads, features
+from audio_heads import ENVIRONMENT_VETO, HUMAN_VOICE_VETO, POSSIBLE_GUNSHOT, AudioHeads, features
 
 MIN_CATEGORY_CONFIDENCE = 0.3
 ENGINE_LABEL = "Model terlatih (YAMNet + classifier)"
@@ -27,6 +27,9 @@ def classify(model, heads: AudioHeads, path: str, max_seconds: float = 600.0) ->
 
     zero_shot_gun = zero_shot["category"] == "gunshot" and p_cat.get("environment", 0.0) < ENVIRONMENT_VETO
     gunshot_vote = p_gun >= heads.gunshot_threshold or zero_shot_gun
+    possible_gunshot = False
+    if gunshot_vote and p_cat.get("human_voice", 0.0) >= HUMAN_VOICE_VETO and p_gun >= POSSIBLE_GUNSHOT:
+        possible_gunshot = True
     if gunshot_vote and p_cat.get("human_voice", 0.0) < HUMAN_VOICE_VETO:
         category = "gunshot"
         confidence = max(p_gun, zero_shot["confidence"] if zero_shot_gun else 0.0)
@@ -56,13 +59,17 @@ def classify(model, heads: AudioHeads, path: str, max_seconds: float = 600.0) ->
               "detected_at_seconds": detected_at, "audioset_label": audioset_label}
 
     label_id = categories.LABELS_ID.get(category, category)
+    if possible_gunshot:
+        label_id += " / kemungkinan tembakan beruntun"
     top = np.argsort(clip)[::-1][:5]
     return {
         "label": (f"{label_id} ({audioset_label})" if audioset_label else label_id)[:100],
         "category": category,
         "confidence": result["confidence"],
         "species": species,
-        "summary": categories.summary(result, duration, ENGINE_LABEL),
+        "summary": categories.summary(result, duration, ENGINE_LABEL)
+        + (" Pola impulsif mirip tembakan beruntun (detektor tembakan sangat yakin); perlu verifikasi." if possible_gunshot else ""),
+        "possible_gunshot": possible_gunshot,
         "detected_at_seconds": detected_at,
         "duration_seconds": round(duration, 2),
         "decision_source": source,

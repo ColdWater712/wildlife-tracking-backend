@@ -8,6 +8,7 @@ Sumber resmi:
   - SpeciesNet v4.0.3a (Google, Apache-2.0)     kaggle.com/models/google/speciesnet
   - MegaDetector v5a (Microsoft/agentmorris, MIT) github.com/agentmorris/MegaDetector/releases
   - MegaDescriptor-T-224 (WildlifeDatasets, CC-BY-NC-4.0) huggingface.co/BVRA/MegaDescriptor-T-224
+  - YuNet (MIT) + SFace (Apache-2.0), OpenCV resmi        huggingface.co/opencv
 """
 
 from __future__ import annotations
@@ -62,12 +63,43 @@ def reid() -> None:
     print("        MegaDescriptor siap")
 
 
+FACE_FILES = {
+    # file: (url resmi OpenCV di Hugging Face, sha256)
+    "face_detection_yunet_2023mar.onnx": ("https://huggingface.co/opencv/face_detection_yunet/resolve/main/face_detection_yunet_2023mar.onnx",
+                                          "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"),
+    "face_recognition_sface_2021dec.onnx": ("https://huggingface.co/opencv/face_recognition_sface/resolve/main/face_recognition_sface_2021dec.onnx",
+                                            "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"),
+}
+
+
+def faces() -> None:
+    target = MODEL_DIR / "faces"
+    target.mkdir(parents=True, exist_ok=True)
+    for name, (url, sha) in FACE_FILES.items():
+        dest = target / name
+        if dest.exists() and hashlib.sha256(dest.read_bytes()).hexdigest() == sha:
+            print(f"[lewati] {name} sudah ada")
+            continue
+        print(f"[unduh] {name}")
+        tmp = dest.with_suffix(".part")
+        urllib.request.urlretrieve(url, tmp)
+        if hashlib.sha256(tmp.read_bytes()).hexdigest() != sha:
+            tmp.unlink()
+            raise RuntimeError(f"Checksum {name} tidak cocok; unduhan dibuang.")
+        tmp.replace(dest)
+    sys.path.insert(0, str(BASE))
+    from faces import FaceModel
+
+    FaceModel()
+    print("        YuNet + SFace siap")
+
+
 def main(argv: list[str]) -> int:
-    targets = argv or ["audio", "vision", "reid"]
+    targets = argv or ["audio", "vision", "reid", "faces"]
     failed = {}
     for t in targets:
         try:
-            {"audio": audio, "vision": vision, "reid": reid}[t]()
+            {"audio": audio, "vision": vision, "reid": reid, "faces": faces}[t]()
         except Exception as e:  # lanjutkan model lain, laporkan di akhir
             failed[t] = f"{type(e).__name__}: {e}"
             print(f"[GAGAL] {t}: {failed[t]}")

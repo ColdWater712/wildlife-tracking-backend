@@ -9,6 +9,8 @@ speciesnet>=5.0.6
 # dependensi SpeciesNet (geofence) yang kadang terlewat di Windows
 reverse_geocoder>=1.5.1
 timm>=1.0
+# Wajah staf: YuNet + SFace (cv2.FaceDetectorYN / FaceRecognizerSF butuh OpenCV >= 4.8)
+opencv-python>=4.8
 pillow>=10
 # Layanan
 numpy>=1.26

@@ -137,6 +137,48 @@ genus/famili 70/90 (78%), foto kosong 20/20 benar.
 Re-identifikasi (ATRW, rata-rata 5 pembagian acak, galeri 3 foto/individu, ambang 0,6): dikenali benar 93,0%,
 salah individu 3,4%, individu baru ditolak 86,2%.
 
+## Pengenalan wajah staf (2026-11-23)
+
+Model: **YuNet** (deteksi wajah, MIT) + **SFace** (embedding wajah 128-d, Apache-2.0, dilatih pada jutaan wajah;
+akurasi LFW ±99,4%), model resmi OpenCV. Wajah staf "dilatih" dengan **mendaftarkan embedding semua fotonya ke galeri**
+(`staff_faces`); melatih ulang jaringan dari 19 foto akan overfit dan tidak bisa dipercaya.
+
+Data: dataset staf (`face_farrellino` 11 foto, `face_nuevalen` 8 foto, semua wajah terdeteksi) dan **LFW** (mirror resmi
+scikit-learn, checksum diverifikasi) untuk ribuan wajah "orang lain". Skrip: `embed_staff_faces.py`, `eval_faces.py`.
+
+Simulasi LFW (200 percobaan, 2 identitas didaftarkan sebagai staf dengan 8 foto, 220 penyusup per percobaan):
+
+| Ambang | Staf dikenali benar | Staf tertukar | Orang lain lolos sebagai staf |
+|---|---|---|---|
+| 0,30 | 99,7% | 0% | 7,90% |
+| 0,363 (rekomendasi OpenCV) | 99,7% | 0% | 1,14% |
+| **0,40 (dipakai)** | **99,7%** | **0%** | **0,32%** |
+| 0,45 | 99,7% | 0% | 0,03% |
+
+Staf asli (leave-one-out, 19 foto) melawan 2.500 wajah LFW:
+
+| Ambang | Dikenali benar | Tertukar | Orang lain lolos |
+|---|---|---|---|
+| 0,30 | 18/19 | 0 | 69/2.500 (2,8%) |
+| **0,40** | **16/19** | **0** | **1/2.500 (0,04%)** |
+
+Tiga foto yang gagal di 0,40 adalah foto Farrellino dengan skor deteksi wajah rendah (0,70–0,78, sudut/cahaya);
+kemiripannya 0,28–0,35 ke foto Farrellino lain dan ≤ 0,21 ke staf lain, jadi tidak pernah tertukar. Karena itu
+dipakai dua tingkat: **≥ 0,40 = staf (bernama)**, **0,30–0,40 = "Kemungkinan <nama> (perlu verifikasi)"** yang tetap
+dihitung tidak dikenal, **lainnya = "Tidak dikenal / pengunjung"**. Augmentasi cermin (flip) diuji dan tidak membantu.
+
+Uji end-to-end (foto yang tidak ada di galeri): foto Farrellino → Farrellino (0,92); foto Nuevalen dengan 2 orang di
+latar → Nuevalen (0,53) + 2 tidak dikenal; 2 wajah LFW → tidak dikenal (0,08 / 0,13); video berisi wajah staf → staf.
+
+## Audio pada video & tembakan beruntun
+
+Trek suara video dianalisis dengan pipeline suara yang sama. Ditemukan saat uji: **tiga tembakan beruntun** terbaca
+"suara manusia", karena pola impulsif berulang mirip tepuk tangan (tidak ada data latih tembakan beruntun). Membatalkan
+veto suara manusia bila detektor tembakan yakin ≥ 0,9 tidak menambah tembakan tertangkap di data uji, tetapi membuat
+15/64 (validasi) suara manusia impulsif terbaca tembakan. Kompromi yang dipakai: kategori tetap suara manusia, tetapi
+bila detektor tembakan ≥ 0,9 hasil ditandai **`possible_gunshot` ("kemungkinan tembakan beruntun")**, ancaman `medium`
+(notifikasi petugas, tanpa insiden otomatis). Akibatnya sebagian tepuk tangan juga ikut ditandai.
+
 ## Belum ada model terlatih
 
 Kondisi fisik (sehat/terluka/kurus), perilaku, dan tanda senjata/jerat/penebangan/api pada foto belum punya model

@@ -9,6 +9,9 @@ tanpa GPU. Hasil uji lengkap ada di [`training/README.md`](training/README.md).
 | `POST /analyze-image` | Deteksi satwa/manusia/kendaraan, jumlah individu, spesies, embedding individu | SpeciesNet v4.0.3a (MegaDetector v5a + classifier Google) + MegaDescriptor |
 | `POST /analyze-video` | Seperti gambar, untuk 1 frame tiap 2 detik (maks. 8 frame) | sama |
 | `POST /embed` | Embedding satwa terbesar di foto referensi | MegaDetector + MegaDescriptor |
+| `POST /embed-face` | Embedding wajah terbesar di foto staf (pendaftaran) | YuNet + SFace (OpenCV) |
+| (di `/analyze-image` & `/analyze-video`) | Wajah manusia + embedding; backend mencocokkan dengan galeri staf | YuNet + SFace |
+| (di `/analyze-video`) | Trek suara video diklasifikasi (`audio`) | pipeline suara di atas |
 | `GET /health` | Status tiap model | |
 
 Laravel memanggilnya lewat `AI_AUDIO_SERVICE_URL` dan `AI_VISION_SERVICE_URL`. Bila ai-service mati,
@@ -121,9 +124,10 @@ Untuk banyak upload sekaligus, aktifkan antrean Laravel (`AI_QUEUE=true`).
 | `AI_PRELOAD_VISION` | `1` | `0` = model visual dimuat saat pertama dipakai |
 | `AI_MODEL_DIR` | `./models` | Lokasi semua model |
 | `AI_MAX_UPLOAD_MB` | `50` | Batas ukuran berkas |
+| `AI_FACE_DETECTION_THRESHOLD` / `AI_FACE_MIN_PX` | `0.7` / `40` | Ambang deteksi wajah YuNet / ukuran wajah minimum (piksel) |
 
 ## Lisensi model
 
-YAMNet & SpeciesNet: Apache-2.0. MegaDetector: MIT. **MegaDescriptor: CC-BY-NC-4.0 (non-komersial)**:
+YAMNet, SpeciesNet & SFace: Apache-2.0. MegaDetector & YuNet: MIT. **MegaDescriptor: CC-BY-NC-4.0 (non-komersial)**:
 gratis untuk konservasi/riset/tugas kampus, tidak untuk produk komersial. Classifier suara proyek ini dilatih dari
 dataset CC-BY dan ESC-50 (CC-BY-NC).

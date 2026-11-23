@@ -4,6 +4,8 @@
   POST /analyze-image   foto kamera      -> SpeciesNet (MegaDetector + classifier spesies) [+ embedding re-ID]
   POST /analyze-video   video kamera     -> beberapa frame dianalisis seperti foto lalu digabung
   POST /embed           foto satwa       -> embedding MegaDescriptor untuk re-identifikasi individu
+  POST /embed-face      foto staf        -> embedding wajah SFace untuk galeri staf
+  (gambar & video juga mendeteksi wajah manusia; video juga mengklasifikasi trek suaranya)
   GET  /health
 
 Jalankan: uvicorn app:app --host 127.0.0.1 --port 8001
@@ -44,7 +46,7 @@ AUDIO_MODEL_NAME = "yamnet-audioset-v1+wt-heads-v1"
 app = FastAPI(title="Wildlife Tracking AI Service", version="2.0.0")
 
 _models: dict[str, object] = {}
-_errors: dict[str, str | None] = {"audio": None, "vision": None, "reid": None}
+_errors: dict[str, str | None] = {"audio": None, "vision": None, "reid": None, "faces": None}
 _load_lock = threading.Lock()
 
 
@@ -68,6 +70,10 @@ def _load(name: str):
                     from reid import ReidModel
 
                     _models[name] = ReidModel()
+                elif name == "faces":
+                    from faces import FaceModel
+
+                    _models[name] = FaceModel()
                 _errors[name] = None
             except Exception as e:  # noqa: BLE001 - dilaporkan lewat /health
                 _errors[name] = f"{type(e).__name__}: {e}"
@@ -106,7 +112,7 @@ def warm_up():
     except Exception:
         pass
     if os.getenv("AI_PRELOAD_VISION", "1") == "1":
-        for name in ("vision", "reid"):
+        for name in ("vision", "reid", "faces"):
             try:
                 _load(name)
             except Exception:
@@ -121,6 +127,7 @@ def health():
             "audio": {"loaded": "audio" in _models, "model": AUDIO_MODEL_NAME, "error": _errors["audio"]},
             "vision": {"loaded": "vision" in _models, "model": getattr(_models.get("vision"), "version", None), "error": _errors["vision"]},
             "reid": {"loaded": "reid" in _models, "model": getattr(_models.get("reid"), "version", None), "error": _errors["reid"]},
+            "faces": {"loaded": "faces" in _models, "model": getattr(_models.get("faces"), "version", None), "error": _errors["faces"]},
         },
         # kompatibel dengan versi lama
         "model": AUDIO_MODEL_NAME,
@@ -148,6 +155,8 @@ def _analyze_image_file(path: Path, country: str | None, embed: bool) -> dict:
     except Exception as e:  # noqa: BLE001
         raise HTTPException(status_code=422, detail=f"Gambar tidak dapat dianalisis: {type(e).__name__}")
     result["model"] = vision.version
+    result["faces"] = _faces_in(path)
+    result["face_model"] = getattr(_models.get("faces"), "version", None)
 
     if embed:
         animals = [d for d in result["detections"] if d["category"] == "animal" and d["confidence"] >= REID_MIN_CONFIDENCE][:3]
@@ -162,6 +171,32 @@ def _analyze_image_file(path: Path, country: str | None, embed: bool) -> dict:
                 d["embedding"] = [round(float(x), 6) for x in v]
             result["embedding_model"] = reid.version
     return result
+
+
+def _faces_in(path: Path) -> list[dict]:
+    """Wajah manusia + embedding SFace (dicocokkan dengan galeri staf oleh backend). Gagal -> daftar kosong."""
+    try:
+        from faces import read_image
+
+        found = _require("faces").analyze(read_image(str(path)))
+    except HTTPException:
+        return []
+    except Exception:  # noqa: BLE001 - wajah bersifat tambahan, jangan gagalkan analisis satwa
+        return []
+    return [{"bbox": f["bbox"], "confidence": f["confidence"], "embedding": [round(float(x), 6) for x in f["embedding"]]}
+            for f in found[:int(os.getenv("AI_FACE_MAX_PER_IMAGE", "10"))]]
+
+
+def _audio_track(path: Path) -> dict | None:
+    """Klasifikasi trek suara video dengan pipeline suara terlatih. Video tanpa suara -> None."""
+    try:
+        yam, heads, lock = _require("audio")
+        with lock:
+            return {**audio_pipeline.classify(yam, heads, str(path), MAX_SECONDS), "model": AUDIO_MODEL_NAME}
+    except HTTPException:
+        return None
+    except ValueError:  # tidak ada trek suara / tidak terbaca
+        return None
 
 
 @app.post("/analyze-image", dependencies=[Depends(check_token)])
@@ -193,7 +228,10 @@ async def analyze_video(file: UploadFile = File(...), country: str | None = Form
         for i, f in enumerate(frames):
             r = _analyze_image_file(f, country, embed)
             r["time_seconds"] = round(i * VIDEO_FRAME_INTERVAL, 2)
+            for face in r["faces"]:
+                face["time_seconds"] = r["time_seconds"]
             per_frame.append(r)
+        audio = _audio_track(path)
 
     from vision import species_rank_key
 
@@ -207,8 +245,10 @@ async def analyze_video(file: UploadFile = File(...), country: str | None = Form
         "vehicle_count": max(r["vehicle_count"] for r in per_frame),
         "top_species": max(species, key=species_rank_key) if species else None,
         "best_frame_seconds": best["time_seconds"],
+        "faces": [face for r in per_frame for face in r["faces"]][: int(os.getenv("AI_FACE_MAX_PER_VIDEO", "30"))],
+        "audio": audio,
         "frames": [{"time_seconds": r["time_seconds"], "animal_count": r["animal_count"], "person_count": r["person_count"],
-                    "vehicle_count": r["vehicle_count"], "top_species": r["top_species"]} for r in per_frame],
+                    "vehicle_count": r["vehicle_count"], "face_count": len(r["faces"]), "top_species": r["top_species"]} for r in per_frame],
         "processing_ms": int((time.perf_counter() - started) * 1000),
     }
 
@@ -233,5 +273,32 @@ async def embed(file: UploadFile = File(...), country: str | None = Form(default
         "bbox": target["bbox"] if target else None,
         "detection_confidence": target["confidence"] if target else None,
         "species": target.get("species") if target else None,
+        "processing_ms": int((time.perf_counter() - started) * 1000),
+    }
+
+
+@app.post("/embed-face", dependencies=[Depends(check_token)])
+async def embed_face(file: UploadFile = File(...)):
+    """Embedding wajah terbesar di foto (pendaftaran wajah staf)."""
+    started = time.perf_counter()
+    with tempfile.TemporaryDirectory() as tmp:
+        path = await _save_upload(file, tmp)
+        from faces import read_image
+
+        try:
+            found = _require("faces").analyze(read_image(str(path)))
+        except HTTPException:
+            raise
+        except Exception:
+            raise HTTPException(status_code=422, detail="Gambar tidak dapat dibaca.")
+    if not found:
+        raise HTTPException(status_code=422, detail="Tidak ada wajah terdeteksi. Gunakan foto wajah yang jelas dan menghadap kamera.")
+    face = found[0]
+    return {
+        "embedding": [round(float(x), 6) for x in face["embedding"]],
+        "bbox": face["bbox"],
+        "confidence": face["confidence"],
+        "face_count": len(found),
+        "face_model": _models["faces"].version,
         "processing_ms": int((time.perf_counter() - started) * 1000),
     }
