@@ -41,7 +41,15 @@ class VisionAnalyzer
     public function analyze(string $imagePath, array $context = [], ?string $videoPath = null): array
     {
         if ($this->models->isConfigured() && ($videoPath || is_file($imagePath))) {
-            return $this->analyzeWithModels($imagePath, $context, $videoPath);
+            try {
+                return $this->analyzeWithModels($imagePath, $context, $videoPath);
+            } catch (\Illuminate\Http\Client\ConnectionException $e) {
+                // ai-service mati / belum jalan: pakai Groq agar upload tetap dianalisis.
+                if (! $this->groq->isConfigured() || ! is_file($imagePath)) {
+                    throw new RuntimeException('ai-service tidak bisa dihubungi (' . config('services.ai_vision.url') . '). Jalankan uvicorn di port 8001.', 0, $e);
+                }
+                Log::warning('ai-service tidak terjangkau; fallback ke Groq', ['error' => $e->getMessage()]);
+            }
         }
 
         if (! is_file($imagePath)) {

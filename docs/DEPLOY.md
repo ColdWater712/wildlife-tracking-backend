@@ -124,5 +124,6 @@ Lalu tutup dan jalankan ulang `scripts\start-server.ps1` (worker antrean harus d
 | Frontend kena CORS error | Origin frontend tidak ada di `FRONTEND_URLS` | Tambahkan, lalu `php artisan config:clear` |
 | Prediksi tetap `queued` | Worker antrean tidak jalan | Jalankan `php artisan queue:work --queue=ai,default` |
 | `audio_service.reachable: false` | ai-service mati atau model belum diunduh | Jalankan uvicorn; cek `http://127.0.0.1:8001/health` |
+| Upload: "analisis AI gagal", `ai_summary` berisi "ai-service tidak bisa dihubungi" / "Connection refused" | uvicorn (jendela ai-service) tidak jalan atau masih memuat model | Jalankan ai-service, tunggu `/health` OK, lalu `POST /ai-predictions/{id}/retry` |
 | `502`/`530` dari Cloudflare | Laravel mati atau port berbeda | Pastikan `php artisan serve` di port yang sama dengan tunnel |
 | Semua request lambat saat ada upload | `AI_QUEUE=false` dengan `php artisan serve` | Set `AI_QUEUE=true` |

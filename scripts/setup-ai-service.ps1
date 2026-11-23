@@ -1,6 +1,6 @@
 # Setup + perbaikan ai-service sekali jalan (Windows).
 # Membuat .venv (Python 3.12), memasang paket yang kurang, mengunduh model yang belum ada,
-# lalu memastikan ketiga model (audio, vision, reid) benar-benar bisa dimuat.
+# lalu memastikan keempat model (audio, vision, reid, faces) benar-benar bisa dimuat.
 #
 # Pemakaian (dari root repo):   powershell -ExecutionPolicy Bypass -File scripts\setup-ai-service.ps1
 # Aman dijalankan berulang: yang sudah terpasang/terunduh dilewati.
@@ -78,7 +78,7 @@ if ($LASTEXITCODE -ne 0) { Fail 'Ada model yang gagal diunduh/dimuat (lihat daft
 
 Step 'Cek akhir: memuat ketiga model'
 $env:TF_CPP_MIN_LOG_LEVEL = '3'
-& $py -c "import sys; sys.argv=['x']; import app; [app._load(n) for n in ('audio','vision','reid')]; print('audio, vision, reid: OK')"
+& $py -c "import sys; sys.argv=['x']; import app; [app._load(n) for n in ('audio','vision','reid','faces')]; print('audio, vision, reid, faces: OK')"
 if ($LASTEXITCODE -ne 0) { Fail 'Model belum bisa dimuat (lihat error di atas).' }
 
 Write-Host "`nai-service siap. Tutup jendela uvicorn lama (bila ada), lalu jalankan dari root repo:" -ForegroundColor Green

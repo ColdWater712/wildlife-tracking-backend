@@ -241,6 +241,34 @@ class VisionModelsIntegrationTest extends TestCase
             ->assertJsonPath('data.processing_status', 'completed');
     }
 
+    public function test_unreachable_ai_service_falls_back_to_groq(): void
+    {
+        config(['services.groq.key' => 'test-key']);
+        Http::fake([
+            self::SERVICE . '/*' => fn () => throw new \Illuminate\Http\Client\ConnectionException('Connection refused'),
+            'api.groq.com/*' => Http::response(['choices' => [['message' => ['content' => json_encode([
+                'animal_detected' => true, 'species_common_name' => 'harimau sumatera', 'confidence' => 0.8,
+                'individual_count' => 1, 'summary' => 'Satu harimau terlihat.',
+            ])]]]]),
+        ]);
+
+        $this->post('/api/ai/upload', ['file' => $this->photo()], $this->h)
+            ->assertCreated()
+            ->assertJsonPath('data.prediction.processing_status', 'completed');
+    }
+
+    public function test_unreachable_ai_service_without_groq_explains_cause(): void
+    {
+        Http::fake([self::SERVICE . '/*' => fn () => throw new \Illuminate\Http\Client\ConnectionException('Connection refused')]);
+
+        $summary = $this->post('/api/ai/upload', ['file' => $this->photo()], $this->h)
+            ->assertCreated()
+            ->assertJsonPath('data.prediction.processing_status', 'failed')
+            ->json('data.prediction.ai_summary');
+
+        $this->assertStringContainsString('ai-service tidak bisa dihubungi', $summary);
+    }
+
     public function test_video_is_analyzed_over_multiple_frames(): void
     {
         $sambar = $this->taxon('sambar', 'Rusa unicolor', 'species', 0.99);

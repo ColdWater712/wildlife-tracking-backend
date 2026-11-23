@@ -53,7 +53,7 @@ Linux/macOS: ganti dua baris pertama dengan `python3 -m venv .venv` dan `source 
 uvicorn app:app --host 127.0.0.1 --port 8001
 ```
 
-Memuat semua model butuh ±30 detik dan ±2,5 GB RAM. Cek `http://127.0.0.1:8001/health`: ketiga model harus `"loaded": true`.
+Memuat semua model butuh ±30 detik dan ±2,5 GB RAM. Cek `http://127.0.0.1:8001/health`: keempat model (audio, vision, reid, faces) harus `"loaded": true`.
 
 `.env` Laravel:
 

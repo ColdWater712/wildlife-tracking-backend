@@ -1,6 +1,6 @@
 # Dokumentasi Backend Wildlife Tracking
 
-Diperbarui: 2026-11-23 · Laravel 13 + Sanctum · 178 endpoint REST (juga di `/api/v1`) · 84 test lulus.
+Diperbarui: 2026-11-23 · Laravel 13 + Sanctum · 178 endpoint REST (juga di `/api/v1`) · 86 test lulus.
 
 Dokumen ini adalah rujukan utama untuk tim frontend dan backend: fitur yang sudah siap, cara memanggilnya,
 apa yang berubah di setiap rilis, fitur yang masih dikembangkan, dan hasil audit terakhir.
@@ -83,6 +83,15 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
 
+### Fallback bila ai-service mati (2026-11-23)
+
+| Fitur | Sebelum | Sesudah | Dampak ke FE |
+|---|---|---|---|
+| Upload gambar/video saat ai-service (port 8001) belum jalan | Langsung `processing_status: failed` dengan pesan koneksi mentah | Gambar dianalisis Groq sebagai cadangan (`completed`, tanpa wajah staf/re-ID). Bila Groq juga tidak diisi, `ai_summary` menjelaskan: "ai-service tidak bisa dihubungi ... Jalankan uvicorn di port 8001." | Tidak ada; respons sama |
+| `scripts/setup-ai-service.ps1` | Cek akhir hanya audio, vision, reid | Cek akhir juga memuat `faces` | Tidak ada |
+
+Error ai-service selain koneksi (mis. HTTP 503, file rusak) tetap menandai prediksi `failed` agar bisa di-retry.
+
 ### Rilis pengenalan wajah staf, audio pada video, rekap data AI (2026-11-23)
 
 | Area | Sebelum | Sesudah | Dampak ke FE |
@@ -102,7 +111,7 @@ Migrasi baru `2026_11_23_000001_create_staff_faces_and_face_results`. Variabel b
 ### Setup ai-service sekali jalan (2026-11-23)
 
 `scripts/setup-ai-service.ps1` memastikan Python 3.12, membuat `ai-service\.venv`, memasang paket yang kurang, mengunduh
-model yang belum ada, lalu mengecek ketiga model (audio, vision, reid) bisa dimuat. `reverse_geocoder` (dependensi
+model yang belum ada, lalu mengecek keempat model (audio, vision, reid, faces) bisa dimuat. `reverse_geocoder` (dependensi
 SpeciesNet yang terlewat di Windows) kini tercantum di `requirements.txt`, dan `download_model.py` tetap mengunduh model
 lain bila satu gagal lalu menampilkan ringkasan OK/GAGAL. Tidak ada perubahan API atau database.
 
