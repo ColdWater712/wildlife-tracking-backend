@@ -51,13 +51,25 @@ if (-not (PyOk 'import torch')) {
 if ($LASTEXITCODE -ne 0) { Fail 'pip install -r requirements.txt gagal (lihat pesan pip di atas).' }
 
 if (-not (PyOk 'import reverse_geocoder')) {
-    Write-Host '[!] reverse_geocoder terpasang tetapi gagal di-import. Memasang ulang...' -ForegroundColor Yellow
-    & $py -m pip install --force-reinstall --no-deps reverse_geocoder
+    # Di Windows, build reverse_geocoder 1.5.1 dari sdist (package_dir './reverse_geocoder') menghasilkan wheel
+    # tanpa folder modul. Modulnya Python murni, jadi disalin langsung dari sdist resmi PyPI (checksum diverifikasi).
+    Write-Host '[!] reverse_geocoder gagal di-import. Memasang modulnya dari sdist resmi PyPI...' -ForegroundColor Yellow
+    $rgUrl = 'https://files.pythonhosted.org/packages/0b/0f/b7d5d4b36553731f11983e19e1813a1059ad0732c5162c01b3220c927d31/reverse_geocoder-1.5.1.tar.gz'
+    $rgSha = '2a2e781b5f69376d922b78fe8978f1350c84fce0ddb07e02c834ecf98b57c75c'
+    $rgTmp = Join-Path $env:TEMP 'wildlife-rg-fix'
+    New-Item -ItemType Directory -Force $rgTmp | Out-Null
+    $rgTar = Join-Path $rgTmp 'reverse_geocoder-1.5.1.tar.gz'
+    Invoke-WebRequest -Uri $rgUrl -OutFile $rgTar -UseBasicParsing
+    if ((Get-FileHash $rgTar -Algorithm SHA256).Hash.ToLower() -ne $rgSha) { Fail 'Checksum reverse_geocoder tidak cocok dengan PyPI; unduhan dibatalkan.' }
+    & tar -xzf $rgTar -C $rgTmp
+    if ($LASTEXITCODE -ne 0) { Fail 'Gagal mengekstrak reverse_geocoder.' }
+    Copy-Item -Recurse -Force (Join-Path $rgTmp 'reverse_geocoder-1.5.1\reverse_geocoder') $site
     if (-not (PyOk 'import reverse_geocoder')) {
         Write-Host 'Pesan error import:' -ForegroundColor Yellow
         & $py -c 'import reverse_geocoder'
         Fail 'reverse_geocoder masih gagal di-import. Kirim pesan error di atas.'
     }
+    Write-Host 'reverse_geocoder OK.' -ForegroundColor Green
 }
 
 Step 'Unduh model (yang sudah ada dilewati)'
