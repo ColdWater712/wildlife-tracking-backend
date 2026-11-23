@@ -10,6 +10,7 @@ use App\Models\TrackingDevice;
 use App\Services\Ai\AnalysisVocabulary;
 use App\Services\Ai\AnimalIdentifier;
 use App\Services\Ai\AudioAnalyzer;
+use App\Services\Ai\FaceMatcher;
 use App\Services\Ai\ThreatResponder;
 use App\Services\Ai\VisionAnalyzer;
 use Illuminate\Http\UploadedFile;
@@ -36,6 +37,7 @@ class AiPredictionService
         private AnimalIdentifier $identifier,
         private ThreatResponder $responder,
         private GeoService $geo,
+        private FaceMatcher $faces,
     ) {}
 
     public static function mediaTypeFromMime(?string $mime): ?string
@@ -208,7 +210,27 @@ class AiPredictionService
         );
 
         $flags = $r['human_activity'];
+
+        // Wajah: staf terdaftar vs tidak dikenal. Keberadaan manusia = orang terdeteksi yang bukan staf
+        // atau wajah tidak dikenal (MegaDetector tidak selalu menandai foto close-up wajah sebagai orang).
+        $faces = $this->faces->match($r['faces'] ?? []);
+        $staffNames = collect($faces)->where('status', 'staff')->pluck('name')->unique()->values();
+        $unknownFaces = collect($faces)->where('status', '!=', 'staff')
+            ->groupBy(fn ($f) => (string) ($f['time_seconds'] ?? 'img'))->map->count()->max() ?? 0;
+        $personCount = (int) ($r['raw']['counts']['person'] ?? ($flags['humans_present'] ? 1 : 0));
+        $flags['staff_present'] = $staffNames->isNotEmpty();
+        $flags['humans_present'] = $unknownFaces > 0 || $personCount > $staffNames->count();
+
+        // Video: trek suaranya juga dianalisis (tembakan, gergaji, dll.).
+        $audio = is_array($r['audio'] ?? null) ? $r['audio'] : null;
+        $soundCategory = $audio ? AnalysisVocabulary::soundCategory($audio['category'] ?? $audio['label'] ?? null) : null;
+        $soundThreat = $soundCategory ? AnalysisVocabulary::maxThreat(
+            AnalysisVocabulary::SOUND_CATEGORIES[$soundCategory]['threat'],
+            ($audio['possible_gunshot'] ?? false) ? 'medium' : 'none',
+        ) : 'none';
+
         $threat = AnalysisVocabulary::maxThreat(
+            $soundThreat,
             ($flags['weapons'] || $flags['traps_or_snares']) ? 'critical' : 'none',
             ($flags['logging'] || $flags['fire_or_smoke']) ? 'high' : 'none',
             ($flags['humans_present'] && in_array($media->zone?->zone_type, ['koridor_ekologis', null], true)) ? 'medium' : 'none',
@@ -219,11 +241,12 @@ class AiPredictionService
         $status = match (true) {
             $r['animal_detected'] && ($r['species'] !== null || ($r['species_common_name'] ?? null) !== null) => 'completed',
             ! $r['animal_detected'] && AiPrediction::threatRank($threat) > 0 => 'completed',
+            ! $r['animal_detected'] && $faces !== [] => 'completed',
             default => 'unrecognized',
         };
 
         return [
-            'model_version' => $this->vision->modelVersion(),
+            'model_version' => mb_substr($this->vision->modelVersion() . ($audio ? '+yamnet' : ''), 0, 100),
             'processing_status' => $status,
             'predicted_species_id' => $r['species']?->species_id,
             'confidence' => $r['confidence'],
@@ -238,9 +261,16 @@ class AiPredictionService
             'behavior_notes' => $r['behavior_notes'],
             'threat_level' => $threat,
             'detected_objects' => $r['objects'],
-            'ai_summary' => $r['summary'],
+            'faces' => $faces,
+            'staff_face_count' => $staffNames->count(),
+            'unknown_face_count' => $unknownFaces,
+            'sound_category' => $soundCategory,
+            'sound_label' => $audio ? mb_substr((string) ($audio['label'] ?? ''), 0, 100) : null,
+            'ai_summary' => trim(($r['summary'] ?? '') . ' ' . $this->faceSummary($staffNames->all(), $unknownFaces)
+                . ($audio && $soundCategory !== 'environment' ? ' Suara video: ' . ($audio['label'] ?? $soundCategory) . '.' : '')),
             'raw_response' => [
                 'human_activity' => $flags,
+                'audio_track' => $audio ? array_diff_key($audio, ['predictions' => 1]) : null,
                 'distinctive_features' => $r['distinctive_features'],
                 'species_label' => [$r['species_common_name'], $r['species_scientific_name']],
                 'identification_candidates' => $identity['candidates'],
@@ -251,6 +281,19 @@ class AiPredictionService
                 'species_id' => $r['species']?->species_id,
             ] : null,
         ];
+    }
+
+    private function faceSummary(array $staff, int $unknown): string
+    {
+        $parts = [];
+        if ($staff !== []) {
+            $parts[] = 'Staf dikenali: ' . implode(', ', $staff) . '.';
+        }
+        if ($unknown > 0) {
+            $parts[] = "{$unknown} wajah tidak dikenal / pengunjung.";
+        }
+
+        return implode(' ', $parts);
     }
 
     /** Simpan embedding deteksi utama; menjadi galeri individu setelah diverifikasi petugas. */
@@ -333,7 +376,7 @@ class AiPredictionService
             $existing->fill(array_merge(array_fill_keys([
                 'predicted_species_id', 'confidence', 'detected_label', 'individual_count', 'predicted_animal_id',
                 'animal_match_confidence', 'animal_match_method', 'physical_condition', 'condition_notes',
-                'behavior', 'behavior_notes', 'sound_category', 'sound_label', 'detected_objects', 'ai_summary', 'raw_response',
+                'behavior', 'behavior_notes', 'sound_category', 'sound_label', 'detected_objects', 'faces', 'ai_summary', 'raw_response',
             ], null), $reset, $attributes))->save();
 
             return $existing;

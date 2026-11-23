@@ -59,6 +59,9 @@ return [
         'country' => env('AI_COUNTRY', 'IDN'),
         // Kemiripan kosinus minimum agar dua foto dianggap individu yang sama (diuji pada ATRW: 0,6).
         'reid_threshold' => (float) env('AI_REID_THRESHOLD', 0.6),
+        // Wajah staf (SFace). Dikalibrasi pada LFW + foto staf; lihat ai-service/training/README.md.
+        'face_threshold' => (float) env('AI_FACE_THRESHOLD', 0.40),
+        'face_possible_threshold' => (float) env('AI_FACE_POSSIBLE_THRESHOLD', 0.30),
     ],
 
     'ai_audio' => [

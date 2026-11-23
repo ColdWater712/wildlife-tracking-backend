@@ -18,7 +18,7 @@ class AiPrediction extends Model
         'media_id', 'analysis_type', 'predicted_species_id', 'confidence', 'detected_label',
         'individual_count', 'predicted_animal_id', 'animal_match_confidence', 'animal_match_method',
         'physical_condition', 'condition_notes', 'behavior', 'behavior_notes',
-        'sound_category', 'sound_label', 'threat_level', 'detected_objects', 'ai_summary',
+        'sound_category', 'sound_label', 'threat_level', 'detected_objects', 'faces', 'staff_face_count', 'unknown_face_count', 'ai_summary',
         'raw_response', 'model_version', 'processing_status', 'processed_at',
         'verification_status', 'verified_species_id', 'verified_animal_id', 'verified_by', 'verified_at',
     ];
@@ -32,6 +32,9 @@ class AiPrediction extends Model
             'animal_match_confidence' => 'float',
             'individual_count' => 'integer',
             'detected_objects' => 'array',
+            'faces' => 'array',
+            'staff_face_count' => 'integer',
+            'unknown_face_count' => 'integer',
             'raw_response' => 'array',
             'processed_at' => 'datetime',
             'verified_at' => 'datetime',

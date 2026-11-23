@@ -34,6 +34,12 @@ class WildlifeVisionClient
         return $this->post('/embed', $path);
     }
 
+    /** Embedding wajah terbesar di foto (pendaftaran wajah staf). */
+    public function embedFace(string $path): array
+    {
+        return $this->post('/embed-face', $path);
+    }
+
     private function post(string $endpoint, string $path, array $fields = []): array
     {
         if (! $this->isConfigured()) {

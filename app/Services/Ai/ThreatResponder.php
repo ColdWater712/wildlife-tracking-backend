@@ -65,9 +65,18 @@ class ThreatResponder
         }
 
         if ($threatRank >= AiPrediction::threatRank('medium')) {
-            $label = $prediction->analysis_type === 'audio'
-                ? ($prediction->sound_label ?? 'suara mencurigakan')
-                : 'aktivitas manusia mencurigakan';
+            $soundThreat = $prediction->sound_category
+                ? AnalysisVocabulary::maxThreat(
+                    AnalysisVocabulary::SOUND_CATEGORIES[$prediction->sound_category]['threat'],
+                    ($prediction->raw_response['audio_track']['possible_gunshot'] ?? false) ? 'medium' : 'none',
+                )
+                : 'none';
+            $label = match (true) {
+                $prediction->analysis_type === 'audio' => $prediction->sound_label ?? 'suara mencurigakan',
+                AiPrediction::threatRank($soundThreat) >= AiPrediction::threatRank('medium') => 'suara ' . ($prediction->sound_label ?? $prediction->sound_category) . ' pada video',
+                ($prediction->unknown_face_count ?? 0) > 0 => "{$prediction->unknown_face_count} orang tidak dikenal",
+                default => 'aktivitas manusia mencurigakan',
+            };
             $this->notifier->notifyRoles(
                 NotificationService::FIELD_ROLES,
                 'risk_zone',
@@ -102,9 +111,14 @@ class ThreatResponder
         }
 
         $flags = $prediction->raw_response['human_activity'] ?? [];
+        // Video: insiden dari trek suaranya (tembakan -> perburuan, gergaji -> perambahan, ...).
+        $soundIncident = $prediction->sound_category
+            ? (AnalysisVocabulary::SOUND_CATEGORIES[$prediction->sound_category]['incident'] ?? null)
+            : null;
 
         return match (true) {
             ($flags['weapons'] ?? false) || ($flags['traps_or_snares'] ?? false) => 'perburuan',
+            $soundIncident !== null => $soundIncident,
             $flags['logging'] ?? false => 'perambahan',
             $flags['fire_or_smoke'] ?? false => 'kebakaran_hutan',
             in_array($prediction->physical_condition, ['injured', 'sick'], true) => 'kesehatan_satwa',

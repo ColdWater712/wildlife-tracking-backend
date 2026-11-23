@@ -10,11 +10,15 @@ class AiSummaryService
     public function __construct(
         private GroqClient $groq,
         private MonitoringStatsService $stats,
+        private AiRecapService $recap,
     ) {}
 
     public function generateSummary(string $start, string $end): array
     {
         $data = $this->stats->collect($start, $end);
+        $recap = $this->recap->build($start, $end);
+        $data['ai_recap_totals'] = $recap['totals'];
+        $data['faces'] = $recap['faces'];
         $summary = null;
         $usedAi = false;
 
@@ -23,7 +27,8 @@ class AiSummaryService
                 $summary = $this->groq->chatText(
                     'Buat ringkasan eksekutif profesional (maks. 5 kalimat, bahasa Indonesia, tanpa markdown) '
                     . 'dari data monitoring satwa TN Gunung Leuser berikut. Soroti jumlah satwa, insiden kritis, '
-                    . 'deteksi ancaman AI (tembakan/gergaji/perburuan), kondisi kesehatan satwa, dan rekomendasi tindakan. Data: '
+                    . 'deteksi ancaman AI (tembakan/gergaji/perburuan), wajah tidak dikenal/pengunjung vs staf, kondisi kesehatan satwa, '
+                    . 'dan rekomendasi tindakan. Data: '
                     . json_encode($data, JSON_UNESCAPED_UNICODE),
                 );
                 $usedAi = $summary !== '';
@@ -41,6 +46,7 @@ class AiSummaryService
             'species_breakdown' => $data['species_breakdown'],
             'incidents_by_type' => $data['incidents_by_type'],
             'ai_insights' => $data['ai_insights'],
+            'ai_recap' => $recap,
             'recommendations' => $this->recommendations($data),
             'generated_at' => now()->toIso8601String(),
         ];
@@ -52,7 +58,9 @@ class AiSummaryService
 
         return "Periode {$start} s/d {$end}: {$s['active_animals']} dari {$s['total_animals']} satwa aktif dipantau, "
             . "{$s['total_readings']} pembacaan GPS, {$s['total_incidents']} insiden ({$s['critical_incidents']} kritis). "
-            . "AI memproses {$s['total_predictions']} media dengan {$s['threat_detections']} deteksi ancaman. "
+            . "AI memproses {$s['total_predictions']} media dengan {$s['threat_detections']} deteksi ancaman"
+            . (($data['faces']['unknown_faces'] ?? 0) > 0 ? " dan {$data['faces']['unknown_faces']} wajah tidak dikenal" : '') . '. '
+            . (($data['faces']['staff'] ?? []) !== [] ? 'Staf terekam: ' . collect($data['faces']['staff'])->map(fn ($x) => "{$x['name']} ({$x['appearances']}x)")->implode(', ') . '. ' : '')
             . "Rata-rata suhu {$s['avg_temperature']}°C, curah hujan total {$s['total_rainfall']} mm.";
     }
 
@@ -65,6 +73,10 @@ class AiSummaryService
         if ($s['threat_detections'] > 0) {
             $recs[] = ['priority' => 'critical', 'icon' => '🚨', 'title' => 'Ancaman Terdeteksi AI',
                 'message' => "{$s['threat_detections']} deteksi ancaman (tembakan/gergaji/aktivitas manusia). Kirim tim patroli ke lokasi terkait."];
+        }
+        if (($data['faces']['unknown_faces'] ?? 0) > 0) {
+            $recs[] = ['priority' => 'high', 'icon' => '👤', 'title' => 'Orang Tidak Dikenal',
+                'message' => "{$data['faces']['unknown_faces']} wajah tidak dikenal/pengunjung terekam kamera di {$data['faces']['media_with_unknown_faces']} media. Periksa izin masuk kawasan."];
         }
         if ($s['critical_incidents'] > 0) {
             $recs[] = ['priority' => 'high', 'icon' => '⚠️', 'title' => 'Insiden Kritis',

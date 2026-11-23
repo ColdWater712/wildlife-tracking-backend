@@ -107,6 +107,8 @@ class VisionAnalyzer
             'human_activity' => $flags,
             'objects' => $this->objectsFromDetections($detections),
             'summary' => $groq['summary'] ?? $this->summaryFromDetections($det, $commonName),
+            'faces' => is_array($det['faces'] ?? null) ? $det['faces'] : [],
+            'audio' => is_array($det['audio'] ?? null) ? $det['audio'] : null,
             'embedding' => $primary['embedding'] ?? null,
             'embedding_bbox' => $primary['bbox'] ?? null,
             'embedding_model' => $det['embedding_model'] ?? null,
@@ -128,10 +130,10 @@ class VisionAnalyzer
         $species = $top ? sprintf('%s (%s, skor %.0f%%)', $top['common_name'] ?? '?', $top['scientific_name'] ?? '?', ($top['score'] ?? 0) * 100) : 'tidak teridentifikasi';
 
         return sprintf(
-            'Model deteksi terlatih (MegaDetector + SpeciesNet) sudah menemukan: %d satwa, %d manusia, %d kendaraan. Spesies: %s. '
+            'Model deteksi terlatih (MegaDetector + SpeciesNet + detektor wajah) sudah menemukan: %d satwa, %d manusia, %d kendaraan, %d wajah. Spesies: %s. '
             . 'Gunakan ini sebagai fakta untuk jumlah dan spesies; fokuskan analisis pada kondisi fisik, perilaku, ciri pembeda individu, '
             . 'serta tanda senjata, jerat, penebangan, atau api/asap.',
-            (int) ($det['animal_count'] ?? 0), (int) ($det['person_count'] ?? 0), (int) ($det['vehicle_count'] ?? 0), $species,
+            (int) ($det['animal_count'] ?? 0), (int) ($det['person_count'] ?? 0), (int) ($det['vehicle_count'] ?? 0), count($det['faces'] ?? []), $species,
         );
     }
 

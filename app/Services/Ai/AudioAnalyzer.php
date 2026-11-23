@@ -82,6 +82,7 @@ class AudioAnalyzer
             'confidence' => (float) ($json['confidence'] ?? $top['score'] ?? 0),
             'species_common_name' => $json['species'] ?? null,
             'summary' => $json['summary'] ?? null,
+            'possible_gunshot' => (bool) ($json['possible_gunshot'] ?? false),
             'raw' => $json,
         ];
     }
@@ -168,7 +169,11 @@ PROMPT;
             'confidence' => round(min(1, max(0, (float) ($r['confidence'] ?? 0))), 4),
             'species_common_name' => $r['species_common_name'] ?? null,
             'species' => $species,
-            'threat_level' => AnalysisVocabulary::SOUND_CATEGORIES[$category]['threat'],
+            // "kemungkinan tembakan beruntun": notifikasi (medium) tanpa insiden otomatis
+            'threat_level' => AnalysisVocabulary::maxThreat(
+                AnalysisVocabulary::SOUND_CATEGORIES[$category]['threat'],
+                ($r['possible_gunshot'] ?? false) ? 'medium' : 'none',
+            ),
             'summary' => $r['summary'] ?? null,
             'features' => $features,
             'model_version' => mb_substr($model, 0, 100),

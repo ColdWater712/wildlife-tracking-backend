@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PermissionController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SpeciesController;
+use App\Http\Controllers\Api\StaffFaceController;
 use App\Http\Controllers\Api\TrackingDeviceController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WeatherDataController;
@@ -72,6 +73,13 @@ $routes = function () {
             Route::get('users/{id}/activity', [UserController::class, 'activity']);
             Route::get('users/{id}/tokens', [UserController::class, 'tokens']);
             Route::delete('users/{id}/tokens/{tokenId}', [UserController::class, 'revokeToken']);
+
+            // Galeri wajah staf (data biometrik, khusus pengelola user)
+            Route::get('staff-faces', [StaffFaceController::class, 'index']);
+            Route::post('staff-faces', [StaffFaceController::class, 'store']);
+            Route::delete('staff-faces', [StaffFaceController::class, 'destroyByName']);
+            Route::get('staff-faces/{id}/file', [StaffFaceController::class, 'file']);
+            Route::delete('staff-faces/{id}', [StaffFaceController::class, 'destroy']);
 
             Route::get('activity-logs', [ActivityLogController::class, 'index']);
             Route::get('activity-logs/{id}', [ActivityLogController::class, 'show']);
@@ -233,6 +241,7 @@ $routes = function () {
             Route::get('media-uploads/{mediaId}/predictions', [AiPredictionController::class, 'mediaPredictions']);
 
             Route::get('ai/summary-report', [AiInsightController::class, 'summaryReport']);
+            Route::get('ai/recap', [AiInsightController::class, 'recap']);
             Route::get('ai/health', [AiInsightController::class, 'health']);
             Route::get('ai/threats', [AiInsightController::class, 'threats']);
             Route::get('ai/vocabulary', [AiInsightController::class, 'vocabulary']);

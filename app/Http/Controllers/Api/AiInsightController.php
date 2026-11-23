@@ -25,6 +25,20 @@ class AiInsightController extends ApiController
         ), 'Ringkasan AI berhasil dibuat');
     }
 
+    /** Rekap data AI per periode (untuk tampilan & ekspor PDF summary report di frontend). */
+    public function recap(Request $request, \App\Services\AiRecapService $recap)
+    {
+        $data = $request->validate([
+            'start_date' => 'sometimes|date',
+            'end_date' => 'sometimes|date|after_or_equal:start_date',
+        ]);
+
+        return $this->success($recap->build(
+            $data['start_date'] ?? now()->subDays(7)->toDateString(),
+            $data['end_date'] ?? now()->toDateString(),
+        ), 'Rekap data AI');
+    }
+
     public function health(GroqClient $groq)
     {
         return $this->success([

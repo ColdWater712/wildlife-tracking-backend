@@ -23,7 +23,7 @@ class MonitoringStatsService
         $incidents = IncidentReport::query()->whereBetween('timestamp', [$from, $to])->get(['incident_type', 'status', 'source']);
         $weather = WeatherData::query()->whereBetween('observed_at', [$from, $to]);
         $predictions = AiPrediction::query()->whereBetween('processed_at', [$from, $to])
-            ->get(['analysis_type', 'processing_status', 'verification_status', 'confidence', 'threat_level', 'physical_condition', 'behavior', 'sound_category', 'predicted_animal_id']);
+            ->get(['analysis_type', 'processing_status', 'verification_status', 'confidence', 'threat_level', 'physical_condition', 'behavior', 'sound_category', 'predicted_animal_id', 'staff_face_count', 'unknown_face_count']);
         $completed = $predictions->where('processing_status', 'completed');
 
         $species = Species::query()->withCount('animals')->get();
@@ -64,7 +64,12 @@ class MonitoringStatsService
             'incidents_by_type' => $incidents->groupBy('incident_type')->map->count()->all(),
             'ai_insights' => [
                 'threats_by_level' => $completed->groupBy('threat_level')->map->count()->all(),
-                'sounds_by_category' => $completed->where('analysis_type', 'audio')->groupBy('sound_category')->map->count()->all(),
+                // termasuk trek suara dari video
+                'sounds_by_category' => $completed->whereNotNull('sound_category')->groupBy('sound_category')->map->count()->all(),
+                'faces' => [
+                    'staff_appearances' => (int) $completed->sum('staff_face_count'),
+                    'unknown_faces' => (int) $completed->sum('unknown_face_count'),
+                ],
                 'physical_conditions' => $completed->whereNotNull('physical_condition')->groupBy('physical_condition')->map->count()->all(),
                 'behaviors' => $completed->whereNotNull('behavior')->groupBy('behavior')->map->count()->all(),
             ],
