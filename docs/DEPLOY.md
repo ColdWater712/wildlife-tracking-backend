@@ -119,6 +119,7 @@ Lalu tutup dan jalankan ulang `scripts\start-server.ps1` (worker antrean harus d
 
 | Gejala | Penyebab | Solusi |
 |---|---|---|
+| `'cloudflared' tidak ditemukan` | winget memasang di `C:\Program Files (x86)\cloudflared\` tanpa menambah PATH | `start-server.ps1` kini mencari di sana otomatis; manual: `& "C:\Program Files (x86)\cloudflared\cloudflared.exe" tunnel --url http://127.0.0.1:8000` |
 | Frontend kena CORS error | Origin frontend tidak ada di `FRONTEND_URLS` | Tambahkan, lalu `php artisan config:clear` |
 | Prediksi tetap `queued` | Worker antrean tidak jalan | Jalankan `php artisan queue:work --queue=ai,default` |
 | `audio_service.reachable: false` | ai-service mati atau model belum diunduh | Jalankan uvicorn; cek `http://127.0.0.1:8001/health` |

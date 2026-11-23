@@ -83,6 +83,11 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
 
+### Perbaikan skrip server tim (2026-11-23)
+
+`scripts/start-server.ps1` sekarang menemukan `cloudflared` yang dipasang winget di `Program Files` walau tidak ada di PATH
+(sebelumnya skrip berhenti dengan "'cloudflared' tidak ditemukan"). Tidak ada perubahan API atau database.
+
 ### Rilis model AI terlatih: suara, kamera jebak, identifikasi individu (2026-11-22)
 
 Semua fitur AI utama kini memakai model yang **sudah terlatih dan teruji pada data nyata**, bukan tebakan LLM.

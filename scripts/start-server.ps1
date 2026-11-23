@@ -45,9 +45,21 @@ if (-not $NoAi) {
 }
 
 if (-not $NoTunnel) {
-    Need cloudflared 'Pasang dengan: winget install --id Cloudflare.cloudflared'
+    # winget memasang cloudflared di Program Files tanpa menambahkannya ke PATH.
+    $cloudflared = (Get-Command cloudflared -ErrorAction SilentlyContinue).Source
+    if (-not $cloudflared) {
+        $cloudflared = @(
+            "${env:ProgramFiles(x86)}\cloudflared\cloudflared.exe",
+            "$env:ProgramFiles\cloudflared\cloudflared.exe",
+            "$env:LOCALAPPDATA\Microsoft\WinGet\Links\cloudflared.exe"
+        ) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+    }
+    if (-not $cloudflared) {
+        Write-Host "[x] 'cloudflared' tidak ditemukan. Pasang dengan: winget install --id Cloudflare.cloudflared" -ForegroundColor Red
+        exit 1
+    }
     Write-Host '[4/4] Cloudflare Tunnel. Salin URL https://....trycloudflare.com dari jendelanya dan bagikan ke tim.' -ForegroundColor Cyan
-    Start-Process powershell -ArgumentList '-NoExit', '-Command', "cloudflared tunnel --url http://127.0.0.1:$Port"
+    Start-Process powershell -ArgumentList '-NoExit', '-Command', "& '$cloudflared' tunnel --url http://127.0.0.1:$Port"
 }
 
 Write-Host ''
