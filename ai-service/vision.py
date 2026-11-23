@@ -68,7 +68,9 @@ class VisionModel:
         for d in raw.get("detections", []):
             if d["conf"] < DETECTION_THRESHOLD:
                 continue
-            item = {"category": d["label"], "confidence": round(float(d["conf"]), 4),
+            # Detektor SpeciesNet memberi label "human"; kontrak layanan ini (dan Laravel) memakai "person".
+            category = "person" if d["label"] == "human" else d["label"]
+            item = {"category": category, "confidence": round(float(d["conf"]), 4),
                     "bbox": [round(float(v), 4) for v in d["bbox"]]}  # [x, y, lebar, tinggi] relatif 0-1
             pc = d.get("processed_classification") or {}
             if d["label"] == "animal" and pc.get("class"):

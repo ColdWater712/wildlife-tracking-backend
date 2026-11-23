@@ -83,6 +83,15 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
 
+### Perbaikan deteksi manusia di ai-service (2026-11-23)
+
+| Fitur | Sebelum | Sesudah | Dampak ke FE |
+|---|---|---|---|
+| Deteksi orang di foto/video | Detektor SpeciesNet memberi label `human`, sedangkan ai-service dan Laravel menghitung `person`: `person_count` selalu 0, kotak orang berlabel "satwa", dan orang yang wajahnya tidak terlihat tidak dihitung sebagai aktivitas manusia | Label dinormalisasi ke `person`; kotak berlabel "manusia"; orang tanpa wajah terlihat ikut dihitung | `detected_objects[].label` kini "manusia" untuk orang; ancaman aktivitas manusia lebih tepat |
+
+Diuji ulang: foto staf → 1 manusia, Farrellino dikenali, ancaman `none`; foto orang asing → 2 manusia, 2 wajah tidak dikenal, ancaman `medium`.
+Server tim perlu menjalankan ulang jendela ai-service (tidak perlu setup ulang).
+
 ### Fallback bila ai-service mati (2026-11-23)
 
 | Fitur | Sebelum | Sesudah | Dampak ke FE |
