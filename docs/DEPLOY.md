@@ -112,6 +112,7 @@ php artisan migrate
 php artisan config:clear
 ```
 
+Bila `ai-service/` berubah, jalankan juga `powershell -ExecutionPolicy Bypass -File scripts\setup-ai-service.ps1`.
 Lalu tutup dan jalankan ulang `scripts\start-server.ps1` (worker antrean harus di-restart agar memakai kode baru).
 `migrate:fresh --seed` hanya dijalankan bila diperlukan dan diumumkan dulu ke tim.
 

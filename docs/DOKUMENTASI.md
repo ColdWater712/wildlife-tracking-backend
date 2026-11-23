@@ -1,6 +1,6 @@
 # Dokumentasi Backend Wildlife Tracking
 
-Diperbarui: 2026-11-22 · Laravel 13 + Sanctum · 168 endpoint REST (juga di `/api/v1`) · 74 test lulus.
+Diperbarui: 2026-11-23 · Laravel 13 + Sanctum · 178 endpoint REST (juga di `/api/v1`) · 84 test lulus.
 
 Dokumen ini adalah rujukan utama untuk tim frontend dan backend: fitur yang sudah siap, cara memanggilnya,
 apa yang berubah di setiap rilis, fitur yang masih dikembangkan, dan hasil audit terakhir.
@@ -82,6 +82,22 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 ## 2. Apa yang diubah
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
+
+### Rilis pengenalan wajah staf, audio pada video, rekap data AI (2026-11-23)
+
+| Area | Sebelum | Sesudah | Dampak ke FE |
+|---|---|---|---|
+| Wajah manusia | Hanya "ada manusia" | Wajah di gambar & video dicocokkan dengan **galeri wajah staf** (YuNet + SFace, OpenCV): nama staf, "Kemungkinan <nama> (perlu verifikasi)", atau **"Tidak dikenal / pengunjung"** | Field baru di prediksi: `faces`, `staff_face_count`, `unknown_face_count` |
+| Ancaman manusia | Setiap orang terdeteksi = aktivitas manusia | Hanya orang/wajah yang **bukan staf**; staf terdaftar tidak memicu ancaman | Notifikasi lebih sedikit untuk patroli staf |
+| Audio pada video | Video hanya dianalisis gambarnya | Trek suara video ikut dianalisis (tembakan, gergaji, ...); ancaman & insiden mengikuti suara | `sound_category`, `sound_label` terisi untuk video; `model_version` berakhiran `+yamnet` |
+| Tembakan beruntun | Terbaca "suara manusia" | Ditandai **kemungkinan tembakan beruntun** (`medium`, notifikasi tanpa insiden otomatis) | Label suara memuat teks itu |
+| Summary report | Statistik umum | **`ai_recap`** di `/ai/summary-report` + endpoint **`GET /ai/recap`**: total, spesies, individu, wajah staf/tidak dikenal, suara (termasuk dari video), ancaman terbaru, per zona, deret harian | Data siap untuk tampilan & ekspor PDF di FE |
+| Galeri wajah staf | – | `GET/POST/DELETE /staff-faces`, `GET /staff-faces/{id}/file`, perintah `php artisan staff:import-faces <folder>` | Halaman admin baru (opsional) |
+
+Hasil uji (detail: `ai-service/training/README.md`): ambang 0,40 → staf dikenali 99,7% (simulasi LFW), orang lain lolos
+sebagai staf 0,32%; dua staf asli 16/19 foto dikenali (leave-one-out), 0 tertukar, 1/2.500 orang lain lolos.
+Migrasi baru `2026_11_23_000001_create_staff_faces_and_face_results`. Variabel baru: `AI_FACE_THRESHOLD`,
+`AI_FACE_POSSIBLE_THRESHOLD`. Test baru: `FaceRecognitionAndRecapTest` (10 test).
 
 ### Setup ai-service sekali jalan (2026-11-23)
 
@@ -328,6 +344,8 @@ langsung membuat insiden dan notifikasi; semua hasil tetap menunggu verifikasi p
 |---|---|
 | `predicted_species_id`, `confidence` | Spesies + keyakinan 0–1 |
 | `predicted_animal_id`, `animal_match_confidence`, `animal_match_method` | Individu: `appearance_reid`, `gps_proximity`, `zone_presence`, `distinctive_marks`, `single_candidate` |
+| `faces` | Daftar wajah: `{status: staff\|possible_staff\|unknown, label, name, similarity, bbox, time_seconds}` (tanpa data biometrik) |
+| `staff_face_count`, `unknown_face_count` | Jumlah staf dikenali / wajah tidak dikenal (video: maksimum per frame) |
 | `individual_count`, `detected_objects` | Jumlah satwa & kotak deteksi MegaDetector (persen gambar) |
 | `physical_condition`, `condition_notes` | `healthy`, `injured`, `sick`, `emaciated`, `unknown` |
 | `behavior`, `behavior_notes` | `foraging`, `resting`, `moving`, `running`, `drinking`, `social`, `parenting`, `mating`, `alert`, `aggressive`, `unknown` |
@@ -375,7 +393,11 @@ await api.post(`/animals/${animalId}/reference-photos`, { formData: form, timeou
 | POST | `/media-uploads/{id}/predictions` | `upload_media` | Analisis media yang ada; `409` jika media punya prediksi terverifikasi |
 | DELETE | `/ai-predictions/{id}`, `/media-uploads/{id}` | `delete_data` | Bukti terverifikasi tidak bisa dihapus |
 | GET | `/media-uploads`, `/media-uploads/{id}`, `/media-uploads/{id}/file`, `/media-uploads/{id}/predictions` | `view_data` | File dari storage privat (butuh token) |
-| GET | `/ai/threats?min_level=medium`, `/ai/summary-report`, `/ai/health`, `/ai/vocabulary` | `view_data` | |
+| GET | `/ai/threats?min_level=medium`, `/ai/summary-report`, `/ai/health`, `/ai/vocabulary` | `view_data` | `summary-report` kini memuat `ai_recap` |
+| GET | `/ai/recap?start_date=&end_date=` | `view_data` | Rekap data AI untuk tampilan & PDF: `totals`, `species`, `other_labels`, `individuals`, `faces`, `sounds`, `threats.recent`, `by_zone`, `daily`, `models` |
+| GET, POST | `/staff-faces` | `manage_users` | Galeri wajah staf. POST multipart `file` + `name` (atau `user_id`); wajah terbesar dipakai, `422` bila tidak ada wajah |
+| DELETE | `/staff-faces/{id}`, `/staff-faces` (`{name}`) | `manage_users` | Hapus satu foto / semua foto seorang staf |
+| GET | `/staff-faces/{id}/file` | `manage_users` | Foto wajah staf |
 | POST | `/ai/detect-objects` | `upload_media` | Analisis cepat tanpa disimpan |
 
 ```ts
@@ -487,6 +509,10 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Server tim (PC + tunnel) | `php artisan serve` melayani satu request sekaligus | Request lain menunggu saat ada analisis AI | `AI_QUEUE=true` (FE polling) |
 | Antrean | `AI_QUEUE=true` butuh FE polling | Hasil AI tidak tampil bila FE tidak polling | Aktifkan setelah FE siap, atau tetap `false` |
 | Skrip Windows | `scripts/start-server.ps1` belum dicoba di Windows (lingkungan pengujian Linux) | Bisa gagal di PC | Laporkan error jendela PowerShell; perintah manual ada di `DEPLOY.md` |
+| Wajah staf | Foto staf dengan wajah menyamping/gelap kadang tidak dikenali (3/19 di uji) dan menjadi "kemungkinan"/tidak dikenal | Staf ditandai pengunjung | Daftarkan 10+ foto per staf dari berbagai sudut & cahaya, termasuk dari kamera lapangan |
+| Wajah staf | Kamera jebak sering menangkap wajah kecil/menyamping/malam (IR); uji hanya memakai foto ponsel & LFW | Pengenalan di lapangan lebih rendah | Uji dengan rekaman kamera sungguhan; ambang bisa diubah lewat `AI_FACE_THRESHOLD` |
+| Privasi | Embedding & foto wajah adalah data biometrik | Risiko hukum (UU PDP) | Persetujuan tertulis staf; galeri hanya untuk admin (sudah), hapus data staf yang keluar (`DELETE /staff-faces`) |
+| AI suara | Tembakan beruntun terbaca suara manusia; sebagian tepuk tangan ikut ditandai "kemungkinan tembakan" | Alarm palsu medium | Latih dengan rekaman tembakan beruntun nyata |
 
 ---
 
@@ -516,5 +542,12 @@ php artisan config:clear
 pakai `php artisan migrate` (data tim tetap ada) dan restart worker; lihat [`DEPLOY.md`](DEPLOY.md).
 Perubahan skema berikutnya selalu ditulis sebagai file migrasi baru.
 
-ai-service (sekali saja): lihat [`../ai-service/README.md`](../ai-service/README.md). Jalankan test dengan
+ai-service (sekali saja): lihat [`../ai-service/README.md`](../ai-service/README.md).
+
+Daftarkan wajah staf (ai-service harus berjalan), dari folder dataset dengan satu subfolder per staf
+(`face_farrellino/`, `face_nuevalen/`, ...):
+
+```bash
+php artisan staff:import-faces C:\path\staf_dataset --replace
+``` Jalankan test dengan
 `php vendor/bin/phpunit`.

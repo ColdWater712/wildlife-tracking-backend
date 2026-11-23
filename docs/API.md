@@ -33,7 +33,8 @@ Akun seed (password `password123`): `admin@`, `peneliti@`, `lapangan@`, `kebijak
 - Ekspor CSV: teks yang diawali `= + - @` diberi awalan `'` agar tidak dijalankan sebagai formula di Excel.
 - CORS: origin frontend diatur lewat `FRONTEND_URLS` (pisahkan dengan koma).
 - AI memakai model terlatih di ai-service: suara (YAMNet + classifier, `AI_AUDIO_SERVICE_URL`), gambar/video
-  (MegaDetector + SpeciesNet, `AI_VISION_SERVICE_URL`), identifikasi individu (MegaDescriptor). Bila `AI_QUEUE=true`, upload/analisis membalas
+  (MegaDetector + SpeciesNet, `AI_VISION_SERVICE_URL`), identifikasi individu (MegaDescriptor), wajah staf (YuNet + SFace)
+  dan suara di dalam video. Galeri wajah staf: `GET/POST/DELETE /staff-faces` (admin). Rekap AI: `GET /ai/recap`. Bila `AI_QUEUE=true`, upload/analisis membalas
   `processing_status: "queued"`; polling `GET /ai-predictions/{id}` sampai selesai.
 - Relasi dikirim dengan nama camelCase sesuai frontend (`trackingDevice`, `predictedSpecies`, `weatherData`, ...).
 
