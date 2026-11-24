@@ -154,7 +154,7 @@ Ekspor (CSV UTF-8 dengan BOM): `/export/gps/csv`, `/export/gps/geojson`, `/expor
 ### Wisata (pengunjung, tiket, tur)
 
 Publik (tanpa login, rate limit 60/menit):
-`POST /register` (`full_name, username, email, phone?, password, password_confirmation`; role selalu `pengunjung`, 5/menit),
+`GET /register/challenge` (soal keamanan: `challenge_token`, `question`), `POST /register` (`full_name, username, email, phone?, password, password_confirmation, captcha_token, captcha_answer`, `website` harus kosong; role selalu `pengunjung`, 5/menit),
 `GET /tourism/routes`, `GET /tourism/routes/{slug}` (rute + 30 shift terdekat + ulasan),
 `GET /tourism/guides`, `GET /tourism/guides/{id}` (+ jadwal), `GET /tourism/guides/{id}/photo`,
 `GET /tourism/schedule?from=&to=&route_id=&guide_id=` (maks. 62 hari; tiap shift punya `remaining`),
@@ -171,6 +171,7 @@ Pengunjung (`book_tickets`):
 | POST | `/visitor/bookings/{code}/cancel` | Hanya sebelum lunas |
 | POST | `/visitor/bookings/{code}/payment-proof` | Multipart `file` (jpg/png/webp/pdf, maks. 5 MB) |
 | GET | `/visitor/bookings/{code}/ticket` | `qr_payload` setelah lunas (`409` sebelumnya) |
+| POST | `/visitor/bookings/{code}/pay-online` | Midtrans Snap → `redirect_url` (503 bila `MIDTRANS_SERVER_KEY` kosong) |
 | POST | `/visitor/bookings/{code}/review` | `route_rating 1-5, guide_rating?, comment?` setelah check-in, sekali |
 
 Status pemesanan: `pending_payment` → `awaiting_verification` → `paid` → `checked_in` → `completed`
@@ -185,6 +186,21 @@ Pengelola (`manage_tourism`), prefix `/tourism/admin`: `routes` (GET/POST, `{id}
 
 Webhook gateway: `POST /payments/webhook`, header `X-Signature: hex(HMAC-SHA256(body, PAYMENT_WEBHOOK_SECRET))`,
 body `{reference, status: paid|failed, amount, transaction_id}`.
+
+Notifikasi Midtrans: `POST /payments/midtrans/notification` (body notifikasi standar Midtrans; `signature_key` = SHA512(order_id+status_code+gross_amount+server_key); status dicek ulang ke API Midtrans).
+
+### Ensiklopedia satwa 3D
+
+Publik (tanpa login, 60/menit): `GET /wildlife/species?search=&taxon_class=&conservation_status=`, `GET /wildlife/species/{id}`,
+`GET /wildlife/species/{id}/model` (`model/gltf-binary`). Hanya spesies `is_public=true`; tanpa data individu/lokasi.
+
+Staf: `GET /species/{id}/model` (`view_data`). `manage_master_data`: `PUT /species/{id}` (profil: `local_names, taxon_class, taxon_order, taxon_family, description, characteristics[], size_weight, lifespan, activity_pattern, diet, behavior, habitat, distribution, population_estimate, threats[], fun_facts[], legal_protection, is_public, model_hotspots[{label, description?, position "Xm Ym Zm", normal?}]`),
+`POST /species/{id}/model` (multipart `file` .glb ≤ 30 MB, `model_source` scan/licensed/illustrative, `model_credit`), `DELETE /species/{id}/model`.
+
+### Token perangkat
+
+`manage_master_data`: `GET /devices/{id}/api-token` (status), `POST /devices/{id}/api-token` (token baru, ditampilkan sekali; token lama dicabut), `DELETE /devices/{id}/api-token`.
+Token hanya untuk `PATCH /devices/{id}/telemetry`, `POST /devices/{id}/captures`, `POST /gps-readings` dan `/gps-readings/bulk` milik perangkat itu; tanpa timeout idle.
 
 ### POS loket (walk-in)
 

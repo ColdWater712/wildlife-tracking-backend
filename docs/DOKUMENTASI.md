@@ -1,6 +1,6 @@
 # Dokumentasi Backend Wildlife Tracking
 
-Diperbarui: 2026-11-25 · Laravel 13 + Sanctum · 234 endpoint REST (juga di `/api/v1`) · 110 test lulus.
+Diperbarui: 2026-11-26 · Laravel 13 + Sanctum · 249 endpoint REST (juga di `/api/v1`) · 130 test lulus.
 
 Dokumen ini adalah rujukan utama untuk tim frontend dan backend: fitur yang sudah siap, cara memanggilnya,
 apa yang berubah di setiap rilis, fitur yang masih dikembangkan, dan hasil audit terakhir.
@@ -82,6 +82,33 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 ## 2. Apa yang diubah
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
+
+### Ensiklopedia satwa 3D, pembayaran online, token perangkat & penutupan risiko (2026-11-26)
+
+**Ensiklopedia satwa 3D** (untuk peneliti, konservasionis, pengunjung, dan petugas loket):
+
+| Area | Isi | Endpoint |
+|---|---|---|
+| Profil spesies | Kolom baru: nama daerah, taksonomi, deskripsi, ciri-ciri, ukuran & berat, umur, pola aktivitas, makanan, perilaku, habitat, sebaran (tingkat wilayah), estimasi populasi, ancaman, fakta menarik, status perlindungan (Permen LHK P.106/2018 & CITES), `is_public`. 8 satwa terisi: orangutan, harimau, badak, gajah Sumatra, rusa sambar, siamang, rangkong badak, beruang madu | `GET /wildlife/species`, `GET /wildlife/species/{id}` (publik, tanpa login) |
+| Model 3D | GLB per spesies + titik keterangan (hotspot) di permukaan model. 8 model **ilustratif** (low-poly, dibuat `tools/species-models/generate.py`) dengan 3 titik ciri khas masing-masing | `GET /wildlife/species/{id}/model` (publik), `GET /species/{id}/model` (staf) |
+| Kelola (`manage_master_data`) | Unggah/ganti model `.glb` (maks. 30 MB) dengan sumber (`scan`/`licensed`/`illustrative`) & kredit lisensi; hapus model; ubah profil & titik keterangan | `POST/DELETE /species/{id}/model`, `PUT /species/{id}` |
+| Keamanan | Katalog publik **tidak** memuat data individu, GPS, zona, atau jumlah individu terpantau (risiko perburuan). GLB divalidasi: header glTF 2.0, panjang sesuai, JSON valid, **tanpa URI eksternal**. Semua teks profil dibuang tag HTML-nya. Hotspot dibatasi format koordinat | `WildlifeEncyclopediaTest` (5) |
+
+**Pembayaran online Midtrans Snap**: `POST /visitor/bookings/{code}/pay-online` mengembalikan URL halaman Midtrans (QRIS, VA, e-wallet, kartu); notifikasi di `POST /payments/midtrans/notification` diverifikasi `signature_key` SHA-512, lalu status **diambil ulang dari API Midtrans**, nominal dicocokkan, idempoten. Aktif bila `MIDTRANS_SERVER_KEY` diisi; tagihan manual lain otomatis kedaluwarsa saat lunas. Test: `MidtransTest` (4, respons Midtrans tiruan).
+
+**Token perangkat**: `GET/POST/DELETE /devices/{id}/api-token` (`manage_master_data`). Token ber-ability `device:{id}` milik akun sistem `sistem-perangkat`, tidak kedaluwarsa karena idle, ditampilkan sekali, dan hanya boleh mengirim telemetri/rekaman/GPS perangkat itu (middleware `RestrictDeviceTokens`).
+
+**Penutupan risiko lain**:
+
+- CAPTCHA pendaftaran (`GET /register/challenge`) + honeypot `website`.
+- `TRUSTED_PROXIES` untuk IP pengunjung asli.
+- Validasi insiden & perangkat.
+- Perintah `security:check`, `users:reset-default-passwords`, dan `tokens:prune-idle` (terjadwal tiap jam).
+- Libur nasional 2027 dari SKB 3 Menteri.
+
+Lihat tabel "Sudah diperbaiki" #18–#27.
+
+Migrasi baru: `2026_11_26_000001_add_profile_and_model_to_species`. Variabel `.env` baru: `TRUSTED_PROXIES`, `REGISTRATION_CAPTCHA`, `REGISTRATION_CAPTCHA_MIN_SECONDS`, `MIDTRANS_SERVER_KEY`, `MIDTRANS_IS_PRODUCTION`, `MIDTRANS_FINISH_URL`. Test: 130.
 
 ### POS loket wisata & perbaikan zona waktu (2026-11-25)
 
@@ -525,19 +552,16 @@ while (p.processing_status === "queued" || p.processing_status === "processing")
 | Tembakan jauh di hutan lebat | 63% tertangkap pada rekaman Vietnam | Tambah rekaman tembakan dari lokasi sendiri lalu latih ulang (`ai-service/training`) |
 | Pohon tumbang | Aturan zero-shot YAMNet (tidak ada data latih) | Kumpulkan rekaman lalu latih |
 | Suara burung per spesies | Kategori umum "suara satwa" | BirdNET (gratis, non-komersial) |
-| Token khusus perangkat | Perangkat memakai token user biasa (ikut timeout 2 jam) | Token Sanctum ber-ability per perangkat tanpa timeout idle |
-| Pembersihan token | Token idle dihapus saat dipakai lagi | Scheduled job pembersih |
 | Notifikasi realtime | FE polling `/notifications` | WebSocket / Laravel Reverb |
 | Analisis video penuh | 1 frame tiap 2 detik (maks. 8) + trek suara | Deteksi gerakan, frame lebih rapat untuk video pendek |
 | Riwayat baterai | `battery-history` = nilai terakhir | Tabel riwayat telemetri |
 | Laporan PDF | CSV | PDF siap cetak |
-| Halaman FE fitur baru | Belum ada halaman user, role, kamera/audio, ancaman AI, kondisi satwa, ekspor | Dikerjakan tim FE |
 
 ---
 
 ## 7. Hasil audit
 
-Audit terakhir: 2026-11-23. Cakupan: keamanan, validasi, kesesuaian fitur dengan dokumen ini, logika backend,
+Audit terakhir: 2026-11-26. Cakupan: keamanan, validasi, kesesuaian fitur dengan dokumen ini, logika backend,
 integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dibuktikan dulu dengan test.
 
 ### Modul wisata: kontrol keamanan
@@ -581,26 +605,31 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | 15 | Integrasi | ai-service mati → semua upload gambar/video langsung `failed` | Fallback ke Groq; pesan jelas bila Groq juga tidak ada |
 | 16 | Konsistensi | `model_version` hasil fallback Groq tetap tertulis `speciesnet` | `groq:<model>` |
 | 17 | Kesesuaian fitur | Galeri wajah, double-count staf per video, `application/mp4`, upload berisi file rusak `500` (rilis wajah) | Diperbaiki & dites di `FaceRecognitionAndRecapTest` |
+| 18 | Logika | Jam shift (WIB) dibandingkan dengan jam server UTC: batas pesan & check-in meleset 7 jam | `TourismClock` (`TOURISM_TIMEZONE`) |
+| 19 | Keamanan | Semua route throttle berbagi satu penghitung per user/IP | Prefix per grup (`throttle:5,1,register`, dst.) |
+| 20 | Keamanan | Rate limit tamu dihitung per IP server FE, bukan pengunjung | FE meneruskan `X-Forwarded-For`; backend hanya memercayainya dari `TRUSTED_PROXIES` (dites `TrustedProxyTest`) |
+| 21 | Keamanan | Pendaftaran tanpa CAPTCHA | Soal hitungan bertanda tangan HMAC, sekali pakai, min. 2 detik + honeypot (`AuthTest`) |
+| 22 | Integrasi | Token perangkat lapangan kedaluwarsa setelah idle 2 jam | Token perangkat ber-ability `device:{id}`: tanpa timeout idle, hanya kirim data perangkatnya (`DeviceTokenTest`) |
+| 23 | Validasi | Status insiden teks bebas; satwa ≠ spesies; zona basi setelah koordinat diubah; zona terhapus bisa dipilih | Enum status, cek silang, hitung ulang zona, tolak zona terhapus (`IncidentValidationTest`) |
+| 24 | Keamanan | Perangkat nonaktif/hilang tetap bisa mengirim GPS/telemetri/rekaman | Ditolak (`409`/`422`) |
+| 25 | Data | Token idle menumpuk di database | `tokens:prune-idle` terjadwal tiap jam |
+| 26 | Integrasi | `/pos/sessions` tanpa `summary` sehingga halaman FE crash | Bentuk data sama dengan detail sesi |
+| 27 | Proses | Tidak ada cara cepat memeriksa konfigurasi berbahaya sebelum server dibuka | `php artisan security:check` + `users:reset-default-passwords` |
 
 ### Masih berisiko / perlu keputusan
 
 | Area | Temuan | Dampak | Usulan |
 |---|---|---|---|
-| Integrasi FE | FE perlu menangani `401` (sesi habis, akun nonaktif, password direset) | User terlempar tanpa penjelasan | Hapus token + arahkan ke login |
 | Sesi | Polling memperpanjang sesi | Sesi tidak habis selama tab terbuka | Putuskan kebijakan polling |
-| Perangkat | Kamera/perekam/kalung memakai token user biasa | Token perangkat hilang bila idle > 2 jam | Token khusus perangkat |
 | Konfigurasi | `.env` lokal memakai `APP_DEBUG=true` | Stack trace bocor bila terbawa ke server | `APP_DEBUG=false` di server |
 | Konfigurasi | `GROQ_API_KEY` sempat terbagi di luar `.env` | Kunci bisa disalahgunakan | Rotasi kunci |
-| Validasi | Status insiden teks bebas; `animal_id` vs `species_id` insiden tidak dicek kecocokannya; ubah koordinat insiden tidak menghitung ulang zona | Data tidak konsisten | Enum status, validasi silang, hitung ulang zona |
-| Validasi | Rekaman perangkat menerima perangkat nonaktif/hilang; zona yang sudah dihapus (soft delete) masih bisa dipilih | Data dari perangkat/zona tidak aktif | Tolak atau tandai |
 | Batas file | Audio dari perangkat maks. 25 MB (batas Groq Whisper), upload manual 50 MB | Rekaman panjang ditolak `422` | Potong rekaman di perangkat |
 | AI | Test AI memakai respons Groq tiruan; model `qwen/qwen3.8-27b` belum diuji asli | Analisis bisa gagal di produksi | Uji dengan kunci asli |
 | AI | Ambang identifikasi (0,35 / 0,1 / ±6 jam) dan aturan suara WAV belum dikalibrasi | Salah identifikasi, alarm palsu | Kalibrasi dengan data lapangan |
 | Hak akses | `/users` khusus admin, peneliti kelola master data, kebijakan hanya baca | Menu FE bisa tidak cocok | Konfirmasi dengan tim FE |
-| Integrasi FE | Proxy `backend-actions.ts` belum meneruskan `text/csv`, `application/geo+json`, audio | Unduhan gagal lewat proxy | Tambah tipe MIME di FE |
 | Integrasi FE | `GET /devices` juga mengembalikan kamera/perekam | Halaman kalung bercampur | FE pakai `?device_type=gps` |
 | Database | Migrasi lama digabung | `migrate:fresh --seed` menghapus data | Skrip migrasi data bila ada data produksi |
-| Data | Token idle menumpuk; file media tanpa antivirus & kebijakan retensi | Tabel & storage membesar | Job pembersih, kebijakan retensi |
+| Data | File media tanpa antivirus & kebijakan retensi (token idle sudah dibersihkan otomatis tiap jam) | Storage membesar | Kebijakan retensi media + pemindai antivirus (ClamAV) di server |
 | Proses | Commit tidak ditandatangani; `test.md` (Apidog) belum diperbarui | Label "Unverified"; tester pakai endpoint lama | Signing bila wajib; perbarui `test.md` |
 | AI suara | Tembakan jauh di hutan lebat: 63% (Vietnam) dan 1/6 pada rekaman malam kontinu; kembang api sering terbaca tembakan | Tembakan bisa terlewat | Latih ulang dengan rekaman lokasi sendiri (`ai-service/training`) |
 | AI gambar | Spesies Sumatra (badak, gajah, orangutan) belum diuji dengan foto Sumatra; makaka & kancil sering hanya tingkat famili | Spesies bisa kosong/umum | Uji & fine-tune dengan foto kamera jebak Sumatra |
@@ -609,7 +638,7 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Lisensi | MegaDescriptor & ESC-50 non-komersial (CC-BY-NC) | Tidak boleh untuk produk komersial | Ganti model bila proyek dikomersialkan |
 | Sumber daya | ai-service dengan semua model butuh ±2,5 GB RAM dan ±3 GB disk; foto ±2,7 detik di CPU | PC lambat saat banyak upload | `AI_QUEUE=true` |
 | Server tim (PC + tunnel) | URL `trycloudflare.com` berganti setiap tunnel dinyalakan ulang; server mati saat PC mati/tidur | Tim harus memperbarui `API_URL` | Domain sendiri (named tunnel) atau ngrok domain statis |
-| Server tim (PC + tunnel) | Akun seed `password123` bisa dicoba siapa pun yang tahu URL | Akses tidak sah | Ganti password akun seed sebelum URL dibagikan |
+| Server tim (PC + tunnel) | Akun seed `password123` bisa dicoba siapa pun yang tahu URL | Akses tidak sah | Jalankan `php artisan users:reset-default-passwords` lalu `php artisan security:check` sebelum URL dibagikan |
 | Server tim (PC + tunnel) | `php artisan serve` melayani satu request sekaligus | Request lain menunggu saat ada analisis AI | `AI_QUEUE=true` (FE polling) |
 | Antrean | `AI_QUEUE=true` butuh FE polling | Hasil AI tidak tampil bila FE tidak polling | Aktifkan setelah FE siap, atau tetap `false` |
 | Galeri wajah staf | `migrate:fresh --seed` mengosongkan `staff_faces`; foto & embedding sengaja tidak di repo | Semua staf terbaca "Tidak dikenal" setelah fresh | Di server pakai `migrate --force`; setelah fresh jalankan `php artisan staff:import-faces <folder> --replace` |
@@ -618,15 +647,14 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Wajah staf | Kamera jebak sering menangkap wajah kecil/menyamping/malam (IR); uji hanya memakai foto ponsel & LFW | Pengenalan di lapangan lebih rendah | Uji dengan rekaman kamera sungguhan; ambang bisa diubah lewat `AI_FACE_THRESHOLD` |
 | Privasi | Embedding & foto wajah adalah data biometrik | Risiko hukum (UU PDP) | Persetujuan tertulis staf; galeri hanya untuk admin (sudah), hapus data staf yang keluar (`DELETE /staff-faces`) |
 | AI suara | Tembakan beruntun terbaca suara manusia; sebagian tepuk tangan ikut ditandai "kemungkinan tembakan" | Alarm palsu medium | Latih dengan rekaman tembakan beruntun nyata |
-| Wisata: pembayaran | Belum terhubung ke payment gateway sungguhan; default verifikasi bukti transfer manual oleh petugas | Petugas harus cek mutasi rekening sebelum menyetujui | Integrasi gateway (Midtrans/Xendit) memakai `POST /payments/webhook` + `PAYMENT_WEBHOOK_SECRET` |
-| Wisata: data | Rute, pemandu, jadwal, dan jasa pemandu di seeder adalah contoh; libur nasional hanya yang bertanggal tetap | Harga/jadwal tidak sesuai lapangan | Isi data asli lewat `/tourism/admin/*` sebelum dibuka ke publik; tambahkan libur Idul Fitri dll. tiap tahun |
+| Wisata: pembayaran | Integrasi Midtrans Snap sudah ada tetapi baru diuji dengan respons tiruan; perlu akun merchant BBTNGL/koperasi | Selama `MIDTRANS_SERVER_KEY` kosong, pembayaran tetap manual | Daftar merchant Midtrans, uji di sandbox dengan kunci asli, atur URL notifikasi |
+| Wisata: data | Rute, pemandu, jadwal, dan jasa pemandu di seeder adalah contoh. Libur 2027 sudah diisi dari SKB (hari raya Islam menunggu keputusan Menag; Nyepi 2027 belum diisi karena sumber berbeda 8/9 Maret) | Harga/jadwal tidak sesuai lapangan | Isi data asli lewat `/tourism/admin/*`; cek ulang libur di `/tourism/prices` tiap tahun |
 | Wisata: tarif | Tarif PP 36/2024 diambil dari pemberitaan (Kompas/Detik) karena situs BBTNGL tidak bisa diakses saat pengembangan | Selisih bila ada ketentuan lokal | Cocokkan dengan pengumuman resmi BBTNGL; ubah lewat `PUT /tourism/admin/prices/{id}` |
 | Wisata: pembatalan | Pengembalian dana (refund) hanya dicatat statusnya; transfer balik dilakukan manual | Dana tertahan bila petugas lupa | SOP refund & integrasi gateway |
 | POS: setoran PNBP | Laporan memisahkan PNBP dan jasa pemandu, tetapi setoran ke kas negara (SIMPONI) masih manual | Salah setor bila laporan tidak dicek | SOP rekonsiliasi harian; integrasi SIMPONI bila tersedia |
 | POS: printer | Struk dicetak lewat dialog print browser (kertas 58/80 mm); belum ada ESC/POS langsung ke printer thermal | Perlu klik print tiap transaksi | Atur printer thermal sebagai default + kiosk printing Chrome, atau aplikasi bridge ESC/POS |
 | POS: offline | Loket butuh koneksi ke server; belum ada mode offline | Loket berhenti saat internet putus | Mode offline + sinkronisasi (butuh desain antikonflik kuota) |
-| Rate limit di balik proxy FE | Permintaan tamu dari FE (server action) tampak berasal dari IP server Next.js, jadi semua tamu berbagi kuota daftar/login per IP | Daftar/login bisa `429` saat ramai | Teruskan `X-Forwarded-For` dari FE + `TrustProxies`, atau limiter per email |
-| Wisata: akun | Pendaftaran terbuka; belum ada verifikasi email/CAPTCHA (sudah rate limit 5/menit) | Akun spam | Tambah verifikasi email atau CAPTCHA sebelum go-live |
+| Wisata: akun | CAPTCHA hitungan + honeypot + rate limit sudah aktif; belum ada verifikasi email | Bot tertarget masih bisa mendaftar | Verifikasi email (butuh SMTP) atau CAPTCHA komersial (Turnstile) bila spam meningkat |
 
 ---
 

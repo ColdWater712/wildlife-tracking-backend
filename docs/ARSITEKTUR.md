@@ -131,6 +131,9 @@ Controller hanya memvalidasi input, memanggil model/service, lalu mengembalikan 
 | `TourismAdminController.php` | `/tourism/admin/*` | Kelola rute, pemandu, shift, tarif, libur, pemesanan, verifikasi bayar, ulasan |
 | `TicketCheckInController.php` | `/tourism/check-in` | Check-in tiket di pintu masuk |
 | `PosController.php` | `/pos/*` | POS loket: sesi kas, jual walk-in, void, struk, laporan harian |
+| `WildlifeCatalogController.php` | `/wildlife/*` (publik) | Ensiklopedia satwa: profil spesies & model 3D tanpa data individu/lokasi |
+| `MidtransNotificationController.php` | `/payments/midtrans/notification` | Notifikasi Midtrans (cek tanda tangan → cek status ulang) |
+| `DeviceTokenController.php` | `/devices/{id}/api-token` | Token API perangkat lapangan |
 | `PaymentWebhookController.php` | `/payments/webhook` | Notifikasi payment gateway bertanda tangan HMAC |
 
 ### 3.4 `app/Http/Middleware/` dan `Traits/`
@@ -189,6 +192,8 @@ Logika yang dipakai lebih dari satu tempat. Controller memanggil service, bukan 
 | `Tourism/PricingService.php` | Hitung harga di server: tiket masuk per orang per hari (tarif hari kerja/libur), jasa pemandu, drone |
 | `Tourism/BookingService.php` | Pesan dengan kunci kuota, kedaluwarsa, bukti bayar, lunas/tolak, batal, token tiket HMAC, check-in |
 | `Tourism/PosService.php` | Sesi kas kasir, penjualan walk-in langsung lunas, kembalian, void, tutup kas + selisih, ringkasan (PNBP vs jasa pemandu) |
+| `Tourism/MidtransService.php` | Buat transaksi Snap, validasi tanda tangan, ambil ulang status, tandai lunas |
+| `RegistrationGuard.php` | CAPTCHA hitungan bertanda tangan HMAC untuk pendaftaran |
 | `Tourism/TourismClock.php` | Waktu lokal kawasan (`TOURISM_TIMEZONE`, default WIB) untuk jam shift & "hari ini"; app tetap UTC |
 
 ### 3.7 `app/Services/Ai/`
@@ -237,6 +242,7 @@ File bawaan Laravel yang membaca `.env`. Yang diubah proyek ini:
 | `2026_11_22_000002_create_animal_embeddings_table` | Galeri re-identifikasi satwa |
 | `2026_11_23_000001_create_staff_faces_and_face_results` | Galeri wajah staf + kolom `faces`, `staff_face_count`, `unknown_face_count` di `ai_predictions` |
 | `2026_11_24_000001_create_tourism_tables` | Modul wisata: tarif, libur, rute, pemandu, shift, pemesanan, peserta, pembayaran, ulasan |
+| `2026_11_26_000001_add_profile_and_model_to_species` | Profil ensiklopedia spesies + model 3D & hotspot |
 | `2026_11_25_000001_add_pos_to_tourism` | POS: `pos_sessions`, kanal penjualan & kasir di `bookings`, metode tunai/EDC + kembalian di `payments` |
 
 **Seeder:** `DatabaseSeeder` memanggil `RolePermissionSeeder` → `UserSeeder` (6 akun, password `password123`) → `SpeciesSeeder` → `GeoZoneSeeder` → `AnimalSeeder` → `TrackingDeviceSeeder` → `GpsReadingSeeder` → `IncidentReportSeeder` → `NotificationSeeder` → `AiSampleSeeder` → `TourismSeeder` (tarif PP 36/2024, 4 rute, 4 pemandu, shift hari ini + 14 hari).
@@ -542,3 +548,17 @@ php artisan migrate:fresh --seed  # reset database lokal
 php artisan tinker                # coba query Eloquent
 tail -f storage/logs/laravel.log  # log error
 ```
+
+
+### Tambahan 2026-11-26
+
+| Berkas | Fungsi |
+|---|---|
+| `app/Http/Middleware/RestrictDeviceTokens.php` | Token perangkat hanya boleh mengirim data perangkatnya sendiri |
+| `app/Support/GlbValidator.php` | Validasi unggahan model 3D `.glb` (header, panjang, JSON, tanpa URI eksternal) |
+| `app/Console/Commands/SecurityCheck.php` | `php artisan security:check`: debug, password bawaan, kunci, proxy, pembayaran |
+| `app/Console/Commands/ResetDefaultPasswords.php` | `php artisan users:reset-default-passwords`: ganti password seed + cabut token |
+| `app/Console/Commands/PruneIdleTokens.php` | `php artisan tokens:prune-idle` (terjadwal tiap jam) |
+| `database/seeders/data/species_profiles.php` | Isi ensiklopedia 8 satwa |
+| `database/seeders/species-models/*.glb` | Model 3D ilustratif + `*.hotspots.json` |
+| `tools/species-models/generate.py` | Generator model ilustratif (Python + trimesh) |
