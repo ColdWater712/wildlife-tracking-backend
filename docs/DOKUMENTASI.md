@@ -83,6 +83,10 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
 
+### Dokumentasi arsitektur untuk anggota baru (2026-11-23)
+
+[`ARSITEKTUR.md`](ARSITEKTUR.md): struktur folder, fungsi tiap file, database & relasi, `.env`, alur request, hubungan FE–BE, dan cara kerja AI. Tidak ada perubahan kode, API, atau database.
+
 ### Perbaikan deteksi manusia di ai-service (2026-11-23)
 
 | Fitur | Sebelum | Sesudah | Dampak ke FE |
