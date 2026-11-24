@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             IncidentReportSeeder::class,
             NotificationSeeder::class,
             AiSampleSeeder::class,
+            TourismSeeder::class,
         ]);
     }
 }

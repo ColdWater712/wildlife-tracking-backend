@@ -20,6 +20,11 @@ use App\Http\Controllers\Api\StaffFaceController;
 use App\Http\Controllers\Api\TrackingDeviceController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\WeatherDataController;
+use App\Http\Controllers\Api\PaymentWebhookController;
+use App\Http\Controllers\Api\TicketCheckInController;
+use App\Http\Controllers\Api\TourismAdminController;
+use App\Http\Controllers\Api\TourismCatalogController;
+use App\Http\Controllers\Api\VisitorBookingController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -40,6 +45,22 @@ $routes = function () {
         Route::post('login', [AuthController::class, 'login']);
         Route::post('auth/login', [AuthController::class, 'login']);
     });
+
+    // ---------------------------------------------------------------- Wisata: publik (tanpa login)
+    Route::post('register', [AuthController::class, 'register'])->middleware('throttle:5,1');
+    Route::middleware('throttle:60,1')->prefix('tourism')->group(function () {
+        Route::get('routes', [TourismCatalogController::class, 'routes']);
+        Route::get('routes/{slug}', [TourismCatalogController::class, 'showRoute'])->where('slug', '[a-z0-9-]+');
+        Route::get('guides', [TourismCatalogController::class, 'guides']);
+        Route::get('guides/{id}', [TourismCatalogController::class, 'showGuide']);
+        Route::get('guides/{id}/photo', [TourismCatalogController::class, 'guidePhoto']);
+        Route::get('schedule', [TourismCatalogController::class, 'schedule']);
+        Route::get('prices', [TourismCatalogController::class, 'prices']);
+        Route::post('quote', [TourismCatalogController::class, 'quote']);
+        Route::get('payment-info', [TourismCatalogController::class, 'paymentInfo']);
+    });
+    // Notifikasi payment gateway; keaslian dicek lewat tanda tangan HMAC, bukan login.
+    Route::post('payments/webhook', PaymentWebhookController::class)->middleware('throttle:120,1');
 
     Route::middleware(['auth:sanctum', 'log.activity'])->group(function () {
 
@@ -286,6 +307,60 @@ $routes = function () {
         Route::middleware('permission:manage_users')->prefix('export')->group(function () {
             Route::get('users/csv', [ExportController::class, 'usersCsv']);
             Route::get('activity-logs/csv', [ExportController::class, 'activityLogsCsv']);
+        });
+
+        // ------------------------------------------------------------ Wisata: pengunjung
+        Route::middleware('permission:book_tickets')->prefix('visitor')->group(function () {
+            Route::get('bookings', [VisitorBookingController::class, 'index']);
+            Route::post('bookings', [VisitorBookingController::class, 'store'])->middleware('throttle:10,1');
+            Route::get('bookings/{code}', [VisitorBookingController::class, 'show']);
+            Route::post('bookings/{code}/cancel', [VisitorBookingController::class, 'cancel']);
+            Route::post('bookings/{code}/payment-proof', [VisitorBookingController::class, 'uploadProof'])->middleware('throttle:10,1');
+            Route::get('bookings/{code}/ticket', [VisitorBookingController::class, 'ticket']);
+            Route::post('bookings/{code}/review', [VisitorBookingController::class, 'review'])->middleware('throttle:10,1');
+        });
+
+        // ------------------------------------------------------------ Wisata: check-in tiket
+        Route::middleware('permission:validate_tickets')->prefix('tourism/check-in')->group(function () {
+            Route::post('/', [TicketCheckInController::class, 'checkIn'])->middleware('throttle:60,1');
+            Route::get('today', [TicketCheckInController::class, 'today']);
+        });
+
+        // ------------------------------------------------------------ Wisata: pengelolaan
+        Route::middleware('permission:manage_tourism')->prefix('tourism/admin')->group(function () {
+            Route::get('routes', [TourismAdminController::class, 'routes']);
+            Route::post('routes', [TourismAdminController::class, 'storeRoute']);
+            Route::get('routes/{id}', [TourismAdminController::class, 'showRoute']);
+            Route::put('routes/{id}', [TourismAdminController::class, 'updateRoute']);
+            Route::delete('routes/{id}', [TourismAdminController::class, 'destroyRoute']);
+
+            Route::get('guides', [TourismAdminController::class, 'guides']);
+            Route::post('guides', [TourismAdminController::class, 'storeGuide']);
+            Route::put('guides/{id}', [TourismAdminController::class, 'updateGuide']);
+            Route::delete('guides/{id}', [TourismAdminController::class, 'destroyGuide']);
+            Route::post('guides/{id}/photo', [TourismAdminController::class, 'uploadGuidePhoto']);
+
+            Route::get('shifts', [TourismAdminController::class, 'shifts']);
+            Route::post('shifts', [TourismAdminController::class, 'storeShift']);
+            Route::put('shifts/{id}', [TourismAdminController::class, 'updateShift']);
+            Route::delete('shifts/{id}', [TourismAdminController::class, 'destroyShift']);
+
+            Route::get('prices', [TourismAdminController::class, 'prices']);
+            Route::put('prices/{id}', [TourismAdminController::class, 'updatePrice']);
+            Route::get('holidays', [TourismAdminController::class, 'holidays']);
+            Route::post('holidays', [TourismAdminController::class, 'storeHoliday']);
+            Route::delete('holidays/{id}', [TourismAdminController::class, 'destroyHoliday']);
+
+            Route::get('bookings', [TourismAdminController::class, 'bookings']);
+            Route::get('bookings/{code}', [TourismAdminController::class, 'showBooking']);
+            Route::post('bookings/{code}/cancel', [TourismAdminController::class, 'cancelBooking']);
+
+            Route::get('payments', [TourismAdminController::class, 'payments']);
+            Route::get('payments/{id}/proof', [TourismAdminController::class, 'paymentProof']);
+            Route::post('payments/{id}/verify', [TourismAdminController::class, 'verifyPayment']);
+
+            Route::get('reviews', [TourismAdminController::class, 'reviews']);
+            Route::patch('reviews/{id}', [TourismAdminController::class, 'updateReviewVisibility']);
         });
     });
 };

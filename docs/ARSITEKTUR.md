@@ -126,6 +126,11 @@ Controller hanya memvalidasi input, memanggil model/service, lalu mengembalikan 
 | `AggregateReportController.php` | `/aggregate-reports` | Buat/simpan/unduh laporan harian/mingguan/bulanan |
 | `ExportController.php` | `/export/...` | Ekspor CSV/GeoJSON; sel teks berbahaya diberi awalan `'` (anti formula injection) |
 | `WeatherDataController.php` | `/weather-data` | Data cuaca, ambil dari Open-Meteo, impor dari perangkat |
+| `TourismCatalogController.php` | `/tourism/*` (publik) | Katalog rute, profil & jadwal pemandu, tarif, simulasi harga |
+| `VisitorBookingController.php` | `/visitor/bookings` | Pemesanan milik pengunjung: pesan, batal, bukti bayar, tiket QR, ulasan |
+| `TourismAdminController.php` | `/tourism/admin/*` | Kelola rute, pemandu, shift, tarif, libur, pemesanan, verifikasi bayar, ulasan |
+| `TicketCheckInController.php` | `/tourism/check-in` | Check-in tiket di pintu masuk |
+| `PaymentWebhookController.php` | `/payments/webhook` | Notifikasi payment gateway bertanda tangan HMAC |
 
 ### 3.4 `app/Http/Middleware/` dan `Traits/`
 
@@ -156,6 +161,9 @@ Satu model = satu tabel. Primary key memakai nama `<entitas>_id` (mis. `animal_i
 | `AiPrediction` | `ai_predictions` | **Hasil AI** per media (lihat bagian 7.5) |
 | `AnimalEmbedding` | `animal_embeddings` | Vektor penampilan satwa untuk re-identifikasi (vektor disembunyikan dari API) |
 | `StaffFace` | `staff_faces` | Vektor wajah staf (data biometrik, disembunyikan dari API) |
+| `TicketPrice`, `PublicHoliday` | `ticket_prices`, `public_holidays` | Tarif PNBP & hari libur |
+| `TourRoute`, `TourGuide`, `GuideShift` | `tour_routes`, `tour_guides`, `guide_shifts` | Paket tur, profil pemandu, jadwal shift |
+| `Booking`, `BookingParticipant`, `Payment`, `TourReview` | `bookings`, `booking_participants`, `payments`, `tour_reviews` | Pemesanan, peserta, transaksi, ulasan |
 | `AggregateReport` | `aggregate_reports` | Laporan periodik tersimpan |
 | `WeatherData` | `weather_data` | Cuaca per titik GPS |
 | `ActivityLog` | `activity_log` | Jejak aktivitas user |
@@ -176,6 +184,8 @@ Logika yang dipakai lebih dari satu tempat. Controller memanggil service, bukan 
 | `AiPredictionService.php` | **Orkestrator AI**: simpan berkas, jalankan analisis (langsung atau antrean), ubah hasil model menjadi baris `ai_predictions`, simpan embedding, panggil `ThreatResponder` |
 | `AiSummaryService.php` | Ringkasan eksekutif teks (Groq) + statistik + rekomendasi |
 | `AiRecapService.php` | Rekap Data AI per periode: total, spesies, individu, wajah, suara, ancaman, per zona, per hari |
+| `Tourism/PricingService.php` | Hitung harga di server: tiket masuk per orang per hari (tarif hari kerja/libur), jasa pemandu, drone |
+| `Tourism/BookingService.php` | Pesan dengan kunci kuota, kedaluwarsa, bukti bayar, lunas/tolak, batal, token tiket HMAC, check-in |
 
 ### 3.7 `app/Services/Ai/`
 
@@ -222,8 +232,9 @@ File bawaan Laravel yang membaca `.env`. Yang diubah proyek ini:
 | `2026_11_22_000001_create_jobs_table` | Tabel antrean |
 | `2026_11_22_000002_create_animal_embeddings_table` | Galeri re-identifikasi satwa |
 | `2026_11_23_000001_create_staff_faces_and_face_results` | Galeri wajah staf + kolom `faces`, `staff_face_count`, `unknown_face_count` di `ai_predictions` |
+| `2026_11_24_000001_create_tourism_tables` | Modul wisata: tarif, libur, rute, pemandu, shift, pemesanan, peserta, pembayaran, ulasan |
 
-**Seeder:** `DatabaseSeeder` memanggil `RolePermissionSeeder` → `UserSeeder` (4 akun, password `password123`) → `SpeciesSeeder` → `GeoZoneSeeder` → `AnimalSeeder` → `TrackingDeviceSeeder` → `GpsReadingSeeder` → `IncidentReportSeeder` → `NotificationSeeder` → `AiSampleSeeder`.
+**Seeder:** `DatabaseSeeder` memanggil `RolePermissionSeeder` → `UserSeeder` (4 akun, password `password123`) → `SpeciesSeeder` → `GeoZoneSeeder` → `AnimalSeeder` → `TrackingDeviceSeeder` → `GpsReadingSeeder` → `IncidentReportSeeder` → `NotificationSeeder` → `AiSampleSeeder` → `TourismSeeder` (tarif PP 36/2024, 4 rute, 4 pemandu, shift 14 hari).
 
 ### 3.11 `ai-service/`
 

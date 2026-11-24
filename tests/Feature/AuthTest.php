@@ -53,9 +53,17 @@ class AuthTest extends TestCase
         $this->getJson('/api/me', $headers)->assertUnauthorized();
     }
 
-    public function test_public_registration_is_not_available(): void
+    /** Registrasi publik hanya untuk pengunjung; akun staf tetap dibuat admin lewat /users. */
+    public function test_public_registration_only_creates_visitor_accounts(): void
     {
-        $this->postJson('/api/register', [])->assertNotFound();
+        $res = $this->postJson('/api/register', [
+            'full_name' => 'Tamu', 'username' => 'tamu', 'email' => 'tamu@contoh.id',
+            'password' => 'rahasia123', 'password_confirmation' => 'rahasia123',
+            'role' => 'administrator_sistem',
+        ])->assertCreated();
+
+        $this->assertSame('pengunjung', $res->json('data.user.name_role'));
+        $this->assertNotContains('view_data', $res->json('data.user.permissions'));
     }
 
     public function test_change_password(): void

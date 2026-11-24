@@ -1,6 +1,6 @@
 # Dokumentasi Backend Wildlife Tracking
 
-Diperbarui: 2026-11-23 · Laravel 13 + Sanctum · 178 endpoint REST (juga di `/api/v1`) · 86 test lulus.
+Diperbarui: 2026-11-23 · Laravel 13 + Sanctum · 178 endpoint REST (juga di `/api/v1`) · 102 test lulus.
 
 Dokumen ini adalah rujukan utama untuk tim frontend dan backend: fitur yang sudah siap, cara memanggilnya,
 apa yang berubah di setiap rilis, fitur yang masih dikembangkan, dan hasil audit terakhir.
@@ -82,6 +82,27 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 ## 2. Apa yang diubah
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
+
+### Modul wisata: pengunjung, tiket, tur, pemandu, transaksi (2026-11-24)
+
+Pengunjung bisa mendaftar, melihat paket tur beserta detailnya, melihat jadwal & profil pemandu per shift,
+memesan, membayar, menerima tiket QR, check-in di pintu masuk, dan menulis ulasan. Petugas mengelola semuanya.
+
+| Area | Isi | Endpoint |
+|---|---|---|
+| Role baru | `pengunjung` (izin `book_tickets` saja); izin staf baru `manage_tourism` (admin) dan `validate_tickets` (lapangan, admin) | `POST /register` |
+| Tarif | PP 36/2024 (PNBP KLHK, berlaku 30-10-2024), TNGL Kelas III: WNI Rp10.000 Senin-Sabtu / Rp15.000 Minggu & libur; pelajar (min. 5) Rp5.000 / Rp7.500; WNA Rp150.000; drone Rp2.000.000/unit/hari. Bisa diubah admin; pemesanan lama memakai harga saat dipesan | `GET /tourism/prices`, `PUT /tourism/admin/prices/{id}` |
+| Paket tur | 4 rute contoh (Bukit Lawang 1 hari & 2H1M, Tangkahan, Ketambe): itinerary per jam, titik kumpul + koordinat, durasi, jarak, tingkat kesulitan, usia minimum, yang termasuk, kelengkapan yang dibawa, aturan, satwa yang mungkin terlihat, titik jalur (untuk peta/rute 3D) | `GET /tourism/routes`, `/tourism/routes/{slug}` |
+| Pemandu & shift | Profil (bio, bahasa, keahlian, hewan favorit + alasan, pengalaman, sertifikasi, fakta unik, rating) dan jadwal shift pagi/siang/malam per rute dengan sisa kuota | `GET /tourism/guides`, `/tourism/guides/{id}`, `/tourism/schedule` |
+| Pemesanan | Harga dihitung server; kuota shift dikunci di transaksi (tidak bisa overbooking); batas bayar 60 menit lalu kuota dilepas | `POST /tourism/quote`, `/visitor/bookings` |
+| Transaksi | Bukti transfer/QRIS diunggah pengunjung lalu diverifikasi petugas, atau webhook payment gateway bertanda tangan HMAC; pembatalan lunas hanya oleh petugas (status `refunded`) | `/visitor/bookings/{code}/payment-proof`, `/tourism/admin/payments/{id}/verify`, `POST /payments/webhook` |
+| Tiket & check-in | Tiket QR `KODE.TOKEN` (token HMAC dari `APP_KEY`), sekali pakai, hanya di tanggal kunjungan | `/visitor/bookings/{code}/ticket`, `POST /tourism/check-in` |
+| Ulasan | Setelah check-in, satu per pemesanan; tag HTML dibuang; admin bisa menyembunyikan | `/visitor/bookings/{code}/review`, `PATCH /tourism/admin/reviews/{id}` |
+
+Keamanan: lihat bagian 7 ("Modul wisata"). Migrasi baru `2026_11_24_000001_create_tourism_tables`, seeder
+`TourismSeeder`, akun contoh `pengunjung@wildlife.id` / `password123`. Variabel `.env` baru: `TOURISM_*`,
+`PAYMENT_WEBHOOK_SECRET`. Jalankan `php artisan schedule:work` (atau cron) agar pemesanan tak dibayar
+dilepas otomatis; tanpa itu kuota tetap dilepas saat ada yang membuka jadwal/pemesanan. Test baru: `TourismTest` (16).
 
 ### Dokumentasi arsitektur untuk anggota baru (2026-11-23)
 
@@ -230,19 +251,25 @@ laporan agregat, ekspor, dan dokumentasi API.
 Akses dicek dari tabel `role_permissions` (middleware `permission:`). Frontend menyembunyikan tombol
 berdasarkan `data.user.permissions` dari `/login` atau `/me`; akses yang ditolak menghasilkan `403`.
 
-| Permission | Untuk apa | Konservasionis | Peneliti | Admin | Kebijakan |
-|---|---|:-:|:-:|:-:|:-:|
-| `view_data` | Baca semua data, dashboard, AI | ✓ | ✓ | ✓ | ✓ |
-| `create_data` | Tambah insiden, GPS, kunjungan zona, cuaca, telemetri, rekaman perangkat | ✓ | ✓ | ✓ | |
-| `update_data` | Ubah insiden, tutup kunjungan zona | ✓ | ✓ | ✓ | |
-| `upload_media` | Upload ke AI | ✓ | ✓ | ✓ | ✓ |
-| `verify_ai` | Verifikasi & retry prediksi AI | ✓ | ✓ | ✓ | |
-| `manage_master_data` | Spesies, satwa, perangkat, zona | | ✓ | ✓ | |
-| `view_reports` | Laporan agregat | | ✓ | ✓ | ✓ |
-| `export_data` | Ekspor CSV/GeoJSON | | ✓ | ✓ | ✓ |
-| `delete_data` | Hapus insiden/prediksi/media/laporan, ubah `sync-status` | | | ✓ | |
-| `manage_users` | User, token, activity log | | | ✓ | |
-| `manage_roles` | Role & permission | | | ✓ | |
+| Permission | Untuk apa | Konservasionis | Peneliti | Admin | Kebijakan | Pengunjung |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| `view_data` | Baca semua data, dashboard, AI | ✓ | ✓ | ✓ | ✓ | |
+| `create_data` | Tambah insiden, GPS, kunjungan zona, cuaca, telemetri, rekaman perangkat | ✓ | ✓ | ✓ | | |
+| `update_data` | Ubah insiden, tutup kunjungan zona | ✓ | ✓ | ✓ | | |
+| `upload_media` | Upload ke AI | ✓ | ✓ | ✓ | ✓ | |
+| `verify_ai` | Verifikasi & retry prediksi AI | ✓ | ✓ | ✓ | | |
+| `manage_master_data` | Spesies, satwa, perangkat, zona | | ✓ | ✓ | | |
+| `view_reports` | Laporan agregat | | ✓ | ✓ | ✓ | |
+| `export_data` | Ekspor CSV/GeoJSON | | ✓ | ✓ | ✓ | |
+| `delete_data` | Hapus insiden/prediksi/media/laporan, ubah `sync-status` | | | ✓ | | |
+| `manage_users` | User, token, activity log | | | ✓ | | |
+| `manage_roles` | Role & permission | | | ✓ | | |
+| `book_tickets` | Pesan tiket/tur, bayar, lihat tiket, tulis ulasan | | | ✓ | | ✓ |
+| `manage_tourism` | Kelola rute, pemandu, shift, tarif, pemesanan, verifikasi bayar | | | ✓ | | |
+| `validate_tickets` | Check-in tiket di pintu masuk | ✓ | | ✓ | | |
+
+Role `pengunjung` dibuat lewat pendaftaran mandiri `POST /register` dan **tidak punya `view_data`**, jadi
+semua data konservasi (satwa, GPS, AI, insiden, pengguna) menolaknya dengan `403`.
 
 Aturan tambahan:
 
@@ -482,6 +509,22 @@ while (p.processing_status === "queued" || p.processing_status === "processing")
 Audit terakhir: 2026-11-23. Cakupan: keamanan, validasi, kesesuaian fitur dengan dokumen ini, logika backend,
 integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dibuktikan dulu dengan test.
 
+### Modul wisata: kontrol keamanan
+
+| Risiko | Kontrol | Dites di `TourismTest` |
+|---|---|---|
+| Pendaftar mengangkat dirinya jadi staf | Role `pengunjung` dipaksa server; `role_id`/`role` dari input diabaikan | ✓ |
+| Pengunjung membaca data konservasi | Pengunjung tidak punya `view_data`; semua endpoint internal `403` | ✓ |
+| Manipulasi harga/status | Harga dihitung `PricingService`; `total_amount`, `status`, `price_lines` dari input diabaikan | ✓ |
+| Overbooking (pemesanan bersamaan) | Baris shift dikunci `lockForUpdate` di dalam transaksi sebelum menghitung sisa kuota | logika |
+| Mengintip pemesanan orang lain (IDOR) | Kode pemesanan acak + query selalu difilter `user_id`; selain pemilik `404` | ✓ |
+| Tiket palsu / dipakai dua kali | Token HMAC dari `APP_KEY`, dibandingkan `hash_equals`; check-in hanya sekali dan hanya di tanggal kunjungan | ✓ |
+| Webhook pembayaran palsu | Wajib tanda tangan HMAC-SHA256 + nominal harus sama + idempoten; tanpa rahasia `503` | ✓ |
+| Unggahan berbahaya | Bukti bayar hanya jpg/png/webp/pdf ≤ 5 MB, disimpan privat, dibuka lewat endpoint staf dengan `nosniff` | ✓ |
+| XSS lewat ulasan | Tag HTML dibuang sebelum disimpan | ✓ |
+| Data pribadi | Kontak pemandu tidak dikirim; nama pengulas disingkat; nomor identitas peserta tidak disimpan | ✓ |
+| Brute force / spam | Rate limit: daftar 5/menit, login 5 percobaan, pesan & unggah 10/menit, katalog 60/menit | - |
+
 ### Sudah diperbaiki
 
 | # | Kategori | Temuan | Perbaikan |
@@ -540,6 +583,11 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Wajah staf | Kamera jebak sering menangkap wajah kecil/menyamping/malam (IR); uji hanya memakai foto ponsel & LFW | Pengenalan di lapangan lebih rendah | Uji dengan rekaman kamera sungguhan; ambang bisa diubah lewat `AI_FACE_THRESHOLD` |
 | Privasi | Embedding & foto wajah adalah data biometrik | Risiko hukum (UU PDP) | Persetujuan tertulis staf; galeri hanya untuk admin (sudah), hapus data staf yang keluar (`DELETE /staff-faces`) |
 | AI suara | Tembakan beruntun terbaca suara manusia; sebagian tepuk tangan ikut ditandai "kemungkinan tembakan" | Alarm palsu medium | Latih dengan rekaman tembakan beruntun nyata |
+| Wisata: pembayaran | Belum terhubung ke payment gateway sungguhan; default verifikasi bukti transfer manual oleh petugas | Petugas harus cek mutasi rekening sebelum menyetujui | Integrasi gateway (Midtrans/Xendit) memakai `POST /payments/webhook` + `PAYMENT_WEBHOOK_SECRET` |
+| Wisata: data | Rute, pemandu, jadwal, dan jasa pemandu di seeder adalah contoh; libur nasional hanya yang bertanggal tetap | Harga/jadwal tidak sesuai lapangan | Isi data asli lewat `/tourism/admin/*` sebelum dibuka ke publik; tambahkan libur Idul Fitri dll. tiap tahun |
+| Wisata: tarif | Tarif PP 36/2024 diambil dari pemberitaan (Kompas/Detik) karena situs BBTNGL tidak bisa diakses saat pengembangan | Selisih bila ada ketentuan lokal | Cocokkan dengan pengumuman resmi BBTNGL; ubah lewat `PUT /tourism/admin/prices/{id}` |
+| Wisata: pembatalan | Pengembalian dana (refund) hanya dicatat statusnya; transfer balik dilakukan manual | Dana tertahan bila petugas lupa | SOP refund & integrasi gateway |
+| Wisata: akun | Pendaftaran terbuka; belum ada verifikasi email/CAPTCHA (sudah rate limit 5/menit) | Akun spam | Tambah verifikasi email atau CAPTCHA sebelum go-live |
 
 ---
 

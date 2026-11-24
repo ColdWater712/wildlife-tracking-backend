@@ -14,6 +14,7 @@ class UserSeeder extends Seeder
             ['username' => 'admin', 'full_name' => 'Admin Sistem', 'email' => 'admin@wildlife.id', 'role' => 'administrator_sistem', 'address' => 'Kantor Balai Besar TNGL, Medan'],
             ['username' => 'peneliti', 'full_name' => 'Peneliti Ekologi', 'email' => 'peneliti@wildlife.id', 'role' => 'peneliti_ekologi', 'address' => 'Stasiun Riset Ketambe'],
             ['username' => 'lapangan', 'full_name' => 'Konservasionis Lapangan', 'email' => 'lapangan@wildlife.id', 'role' => 'konservasionis_lapangan', 'address' => 'Pos Jaga Bukit Lawang'],
+            ['username' => 'pengunjung', 'full_name' => 'Pengunjung Contoh', 'email' => 'pengunjung@wildlife.id', 'role' => 'pengunjung', 'address' => 'Medan'],
             ['username' => 'kebijakan', 'full_name' => 'Pengambil Kebijakan', 'email' => 'kebijakan@wildlife.id', 'role' => 'pengambil_kebijakan', 'address' => 'KLHK, Jakarta'],
         ];
 

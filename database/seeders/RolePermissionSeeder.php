@@ -21,12 +21,15 @@ class RolePermissionSeeder extends Seeder
         'upload_media' => 'Mengunggah media untuk dianalisis AI',
         'verify_ai' => 'Memverifikasi dan mengulang prediksi AI',
         'export_data' => 'Mengekspor data (CSV/GeoJSON)',
+        'book_tickets' => 'Memesan tiket dan tur, membayar, dan menulis ulasan (pengunjung)',
+        'manage_tourism' => 'Mengelola tur, pemandu, jadwal shift, tarif, pemesanan, dan verifikasi pembayaran',
+        'validate_tickets' => 'Memeriksa (check-in) tiket pengunjung di pintu masuk',
     ];
 
     public const ROLES = [
         'konservasionis_lapangan' => [
             'description' => 'Petugas konservasi di lapangan',
-            'permissions' => ['view_data', 'create_data', 'update_data', 'upload_media', 'verify_ai'],
+            'permissions' => ['view_data', 'create_data', 'update_data', 'upload_media', 'verify_ai', 'validate_tickets'],
         ],
         'peneliti_ekologi' => [
             'description' => 'Peneliti yang menganalisis data ekologi dan satwa',
@@ -40,6 +43,10 @@ class RolePermissionSeeder extends Seeder
         'pengambil_kebijakan' => [
             'description' => 'Pengambil kebijakan yang memantau laporan dan ringkasan',
             'permissions' => ['view_data', 'view_reports', 'upload_media', 'export_data'],
+        ],
+        'pengunjung' => [
+            'description' => 'Pengunjung/wisatawan yang memesan tiket dan tur (tidak bisa melihat data konservasi)',
+            'permissions' => ['book_tickets'],
         ],
     ];
 

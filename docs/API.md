@@ -70,6 +70,10 @@ Semua relasi antar tabel memakai ID (FK), bukan nama.
 | manage_master_data | | ✓ | ✓ | |
 | view_reports / export_data | | ✓ | ✓ | ✓ |
 | delete_data / manage_users / manage_roles | | | ✓ | |
+| manage_tourism | | | ✓ | |
+| validate_tickets | ✓ | | ✓ | |
+
+Role `pengunjung` (daftar sendiri lewat `POST /register`) hanya punya `book_tickets` dan tidak bisa membaca data konservasi.
 
 Permission disimpan di `role_permissions` dan bisa diubah admin lewat `/roles/{id}/permissions`.
 `create_data` = menambah data lapangan, `update_data` = mengubahnya (PUT insiden, keluar zona).
@@ -146,6 +150,41 @@ Ekspor (CSV UTF-8 dengan BOM): `/export/gps/csv`, `/export/gps/geojson`, `/expor
 `/export/devices/csv`, `/export/incidents/csv`, `/export/weather/csv`, `/export/ai-predictions/csv`,
 `/export/geo-zones/csv`, `/export/geo-zones/geojson`, `/export/zone-visits/csv`, `/export/aggregate-report/{id}`,
 `/export/users/csv`, `/export/activity-logs/csv` (admin). Filter umum: `start_date`, `end_date`.
+
+### Wisata (pengunjung, tiket, tur)
+
+Publik (tanpa login, rate limit 60/menit):
+`POST /register` (`full_name, username, email, phone?, password, password_confirmation`; role selalu `pengunjung`, 5/menit),
+`GET /tourism/routes`, `GET /tourism/routes/{slug}` (rute + 30 shift terdekat + ulasan),
+`GET /tourism/guides`, `GET /tourism/guides/{id}` (+ jadwal), `GET /tourism/guides/{id}/photo`,
+`GET /tourism/schedule?from=&to=&route_id=&guide_id=` (maks. 62 hari; tiap shift punya `remaining`),
+`GET /tourism/prices`, `POST /tourism/quote` (`route_id, visit_date, wni_count, wna_count, student_count, drone_count`),
+`GET /tourism/payment-info`.
+
+Pengunjung (`book_tickets`):
+
+| Method | Path | Keterangan |
+|---|---|---|
+| GET | `/visitor/bookings` | Pemesanan milik sendiri |
+| POST | `/visitor/bookings` | `route_id, shift_id, wni_count, wna_count, student_count, drone_count?, contact_name, contact_phone, emergency_contact, notes?, payment_method (bank_transfer/qris/ewallet), participants[{full_name, visitor_type wni/wna/pelajar, age?}]`. `409` bila kuota habis |
+| GET | `/visitor/bookings/{code}` | Detail + `payment_window_seconds_left` |
+| POST | `/visitor/bookings/{code}/cancel` | Hanya sebelum lunas |
+| POST | `/visitor/bookings/{code}/payment-proof` | Multipart `file` (jpg/png/webp/pdf, maks. 5 MB) |
+| GET | `/visitor/bookings/{code}/ticket` | `qr_payload` setelah lunas (`409` sebelumnya) |
+| POST | `/visitor/bookings/{code}/review` | `route_rating 1-5, guide_rating?, comment?` setelah check-in, sekali |
+
+Status pemesanan: `pending_payment` → `awaiting_verification` → `paid` → `checked_in` → `completed`
+(atau `cancelled` / `expired`). Pemesanan orang lain selalu `404`.
+
+Petugas loket (`validate_tickets`): `POST /tourism/check-in` (`ticket` = isi QR `KODE.TOKEN`), `GET /tourism/check-in/today`.
+
+Pengelola (`manage_tourism`), prefix `/tourism/admin`: `routes` (GET/POST, `{id}` GET/PUT/DELETE),
+`guides` (GET/POST, `{id}` PUT/DELETE, `{id}/photo` POST), `shifts` (GET/POST, `{id}` PUT/DELETE),
+`prices` (GET, `{id}` PUT), `holidays` (GET/POST, `{id}` DELETE), `bookings` (GET, `{code}` GET, `{code}/cancel` POST),
+`payments` (GET, `{id}/proof` GET, `{id}/verify` POST `{approve, reason?}`), `reviews` (GET, `{id}` PATCH `{is_visible}`).
+
+Webhook gateway: `POST /payments/webhook`, header `X-Signature: hex(HMAC-SHA256(body, PAYMENT_WEBHOOK_SECRET))`,
+body `{reference, status: paid|failed, amount, transaction_id}`.
 
 ## Pipeline AI
 

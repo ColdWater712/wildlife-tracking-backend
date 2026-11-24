@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\ActivityLog;
+use App\Models\Role;
 use App\Models\User;
 use App\Services\ApiSessionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends ApiController
@@ -61,6 +63,46 @@ class AuthController extends ApiController
             'token' => $token,
             'token_type' => 'Bearer',
         ], 'Login berhasil');
+    }
+
+    /**
+     * Pendaftaran mandiri pengunjung. Role selalu "pengunjung" (tidak bisa dipilih dari input),
+     * sehingga pendaftar tidak pernah mendapat akses ke data konservasi.
+     */
+    public function register(Request $request)
+    {
+        $data = $request->validate([
+            'full_name' => 'required|string|max:100',
+            'username' => 'required|string|max:50|alpha_dash|unique:users,username',
+            'email' => 'required|email|max:150|unique:users,email',
+            'phone' => 'nullable|string|max:30',
+            'password' => ['required', 'string', 'confirmed', Password::min(8)->letters()->numbers()],
+        ]);
+
+        $roleId = Role::where('name_role', 'pengunjung')->value('role_id');
+        if (! $roleId) {
+            return $this->error('Pendaftaran pengunjung belum tersedia.', 503);
+        }
+
+        $user = User::create([
+            'full_name' => $data['full_name'],
+            'username' => $data['username'],
+            'email' => Str::lower($data['email']),
+            'phone' => $data['phone'] ?? null,
+            'password' => $data['password'],
+            'role_id' => $roleId,
+            'status' => 'aktif',
+        ])->load('role');
+
+        $newToken = $user->createToken('api-token');
+        ApiSessionService::touch($newToken->accessToken);
+        ActivityLog::record($user->user_id, 'REGISTER', ['ip' => $request->ip()]);
+
+        return $this->success([
+            'user' => self::presentUser($user),
+            'token' => $newToken->plainTextToken,
+            'token_type' => 'Bearer',
+        ], 'Pendaftaran berhasil', 201);
     }
 
     public function logout(Request $request)

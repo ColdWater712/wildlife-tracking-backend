@@ -35,6 +35,19 @@ return [
         ],
     ],
 
+    // Modul wisata: tiket, tur, pembayaran.
+    'tourism' => [
+        // Batas waktu bayar sebelum pemesanan kedaluwarsa dan kuota dilepas.
+        'payment_window_minutes' => (int) env('TOURISM_PAYMENT_WINDOW_MINUTES', 60),
+        // Rekening/QRIS tujuan transfer yang ditampilkan ke pengunjung (bukan rahasia).
+        'bank_name' => env('TOURISM_BANK_NAME', ''),
+        'bank_account_number' => env('TOURISM_BANK_ACCOUNT_NUMBER', ''),
+        'bank_account_holder' => env('TOURISM_BANK_ACCOUNT_HOLDER', ''),
+        'qris_merchant_name' => env('TOURISM_QRIS_MERCHANT_NAME', ''),
+        // Rahasia HMAC webhook payment gateway. Kosong = webhook ditolak (503).
+        'webhook_secret' => env('PAYMENT_WEBHOOK_SECRET', ''),
+    ],
+
     // Groq (vision, text, dan Whisper untuk transkripsi audio)
     'groq' => [
         'key' => env('GROQ_API_KEY', ''),
