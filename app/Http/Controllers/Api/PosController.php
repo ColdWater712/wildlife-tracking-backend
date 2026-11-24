@@ -54,7 +54,7 @@ class PosController extends ApiController
 
         return $this->success($this->presentSession($closed), $closed->cash_difference === 0
             ? 'Sesi ditutup. Kas sesuai.'
-            : 'Sesi ditutup dengan selisih kas Rp'.number_format($closed->cash_difference, 0, ',', '.').'.');
+            : 'Sesi ditutup dengan selisih kas '.($closed->cash_difference < 0 ? 'kurang' : 'lebih').' Rp'.number_format(abs($closed->cash_difference), 0, ',', '.').'.');
     }
 
     /** Riwayat sesi. Admin: semua kasir (filter tanggal); kasir: miliknya saja. */
