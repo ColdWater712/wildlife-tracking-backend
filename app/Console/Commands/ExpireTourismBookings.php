@@ -16,7 +16,7 @@ class ExpireTourismBookings extends Command
     public function handle(BookingService $bookings): int
     {
         $expired = $bookings->expireStale();
-        $completed = Booking::where('status', 'checked_in')->whereDate('visit_date', '<', today())->update(['status' => 'completed']);
+        $completed = Booking::where('status', 'checked_in')->whereDate('visit_date', '<', \App\Services\Tourism\TourismClock::today())->update(['status' => 'completed']);
 
         $this->info("{$expired} pemesanan kedaluwarsa, {$completed} kunjungan selesai.");
 

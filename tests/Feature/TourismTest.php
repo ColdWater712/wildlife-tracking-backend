@@ -8,6 +8,7 @@ use App\Models\Payment;
 use App\Models\TourRoute;
 use App\Models\User;
 use App\Services\Tourism\BookingService;
+use App\Services\Tourism\TourismClock;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -39,7 +40,8 @@ class TourismTest extends TestCase
     private function shiftFor(TourRoute $route, ?string $date = null): GuideShift
     {
         return GuideShift::where('route_id', $route->route_id)
-            ->when($date, fn ($q) => $q->whereDate('shift_date', $date))
+            // Tanpa tanggal: ambil shift mulai besok (shift hari ini bisa sudah tutup untuk pemesanan online).
+            ->when($date, fn ($q) => $q->whereDate('shift_date', $date), fn ($q) => $q->whereDate('shift_date', '>', TourismClock::today()))
             ->where('status', 'scheduled')->orderBy('shift_date')->firstOrFail();
     }
 

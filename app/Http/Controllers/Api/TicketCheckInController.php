@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Booking;
 use App\Services\Tourism\BookingService;
+use App\Services\Tourism\TourismClock;
 use Illuminate\Http\Request;
 
 /** Pemeriksaan tiket di pintu masuk (izin validate_tickets). */
@@ -27,7 +28,7 @@ class TicketCheckInController extends ApiController
     public function today()
     {
         return $this->list(Booking::with(['route:route_id,name', 'shift.guide:guide_id,display_name', 'participants'])
-            ->whereDate('visit_date', today())
+            ->whereDate('visit_date', TourismClock::today())
             ->whereIn('status', ['paid', 'checked_in'])
             ->orderBy('shift_id'));
     }

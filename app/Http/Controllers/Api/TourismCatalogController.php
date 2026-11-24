@@ -9,6 +9,7 @@ use App\Models\TourReview;
 use App\Models\TourRoute;
 use App\Services\Tourism\BookingService;
 use App\Services\Tourism\PricingService;
+use App\Services\Tourism\TourismClock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -56,7 +57,7 @@ class TourismCatalogController extends ApiController
             'route' => $route,
             'upcoming_shifts' => $this->presentShifts(
                 GuideShift::with('guide')->where('route_id', $route->route_id)
-                    ->where('status', 'scheduled')->whereDate('shift_date', '>=', today())
+                    ->where('status', 'scheduled')->whereDate('shift_date', '>=', TourismClock::today())
                     ->orderBy('shift_date')->orderBy('start_time')->limit(30)->get()
             ),
             'reviews' => $reviews,
@@ -84,7 +85,7 @@ class TourismCatalogController extends ApiController
             'guide' => $guide,
             'upcoming_shifts' => $this->presentShifts(
                 GuideShift::with('route')->where('guide_id', $id)->where('status', 'scheduled')
-                    ->whereDate('shift_date', '>=', today())->orderBy('shift_date')->limit(30)->get()
+                    ->whereDate('shift_date', '>=', TourismClock::today())->orderBy('shift_date')->limit(30)->get()
             ),
         ]);
     }
@@ -111,8 +112,8 @@ class TourismCatalogController extends ApiController
         ]);
         $this->bookings->expireStale();
 
-        $from = $data['from'] ?? today()->toDateString();
-        $to = $data['to'] ?? today()->addDays(13)->toDateString();
+        $from = $data['from'] ?? TourismClock::today();
+        $to = $data['to'] ?? TourismClock::now()->addDays(13)->toDateString();
         // Batasi rentang agar query tetap ringan.
         if (now()->parse($from)->diffInDays(now()->parse($to)) > 62) {
             return $this->error('Rentang jadwal maksimal 62 hari.', 422);
@@ -120,7 +121,7 @@ class TourismCatalogController extends ApiController
 
         $shifts = GuideShift::with(['guide', 'route'])
             ->where('status', 'scheduled')
-            ->whereDate('shift_date', '>=', max($from, today()->toDateString()))
+            ->whereDate('shift_date', '>=', max($from, TourismClock::today()))
             ->whereDate('shift_date', '<=', $to)
             ->when($data['route_id'] ?? null, fn ($q, $id) => $q->where('route_id', $id))
             ->when($data['guide_id'] ?? null, fn ($q, $id) => $q->where('guide_id', $id))
@@ -142,7 +143,7 @@ class TourismCatalogController extends ApiController
     {
         $data = $request->validate([
             'route_id' => 'required|integer|exists:tour_routes,route_id',
-            'visit_date' => 'required|date|after_or_equal:today',
+            'visit_date' => 'required|date|after_or_equal:'.TourismClock::today(),
             'wni_count' => 'sometimes|integer|min:0|max:50',
             'wna_count' => 'sometimes|integer|min:0|max:50',
             'student_count' => 'sometimes|integer|min:0|max:50',

@@ -191,8 +191,9 @@ class TourismSeeder extends Seeder
             ['ketambe-forest-trek', 3, 'pagi', '07:30', '14:00'],
         ];
 
-        for ($day = 1; $day <= 14; $day++) {
-            $date = now()->addDays($day)->toDateString();
+        // Mulai hari ini (day 0) agar loket bisa langsung menjual tiket walk-in.
+        for ($day = 0; $day <= 14; $day++) {
+            $date = \App\Services\Tourism\TourismClock::now()->addDays($day)->toDateString();
             foreach ($plan as $i => [$slug, $guideIndex, $type, $start, $end]) {
                 // pemandu libur bergiliran: lewati satu kombinasi tiap hari
                 if (($day + $i) % 5 === 0) {

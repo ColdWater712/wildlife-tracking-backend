@@ -44,6 +44,8 @@ return [
         'bank_account_number' => env('TOURISM_BANK_ACCOUNT_NUMBER', ''),
         'bank_account_holder' => env('TOURISM_BANK_ACCOUNT_HOLDER', ''),
         'qris_merchant_name' => env('TOURISM_QRIS_MERCHANT_NAME', ''),
+        // Zona waktu jam shift & tanggal kunjungan (APP_TIMEZONE tetap UTC).
+        'timezone' => env('TOURISM_TIMEZONE', 'Asia/Jakarta'),
         // Rahasia HMAC webhook payment gateway. Kosong = webhook ditolak (503).
         'webhook_secret' => env('PAYMENT_WEBHOOK_SECRET', ''),
     ],

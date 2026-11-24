@@ -11,6 +11,7 @@ use App\Models\TourGuide;
 use App\Models\TourReview;
 use App\Models\TourRoute;
 use App\Services\Tourism\BookingService;
+use App\Services\Tourism\TourismClock;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -198,8 +199,8 @@ class TourismAdminController extends ApiController
         ]);
 
         $shifts = GuideShift::with(['guide:guide_id,display_name', 'route:route_id,name'])
-            ->whereDate('shift_date', '>=', $data['from'] ?? today()->toDateString())
-            ->whereDate('shift_date', '<=', $data['to'] ?? today()->addDays(30)->toDateString())
+            ->whereDate('shift_date', '>=', $data['from'] ?? TourismClock::today())
+            ->whereDate('shift_date', '<=', $data['to'] ?? TourismClock::now()->addDays(30)->toDateString())
             ->when($data['guide_id'] ?? null, fn ($q, $id) => $q->where('guide_id', $id))
             ->when($data['route_id'] ?? null, fn ($q, $id) => $q->where('route_id', $id))
             ->orderBy('shift_date')->orderBy('start_time')->get()
@@ -249,7 +250,7 @@ class TourismAdminController extends ApiController
         $data = $request->validate([
             'guide_id' => "{$required}|integer|exists:tour_guides,guide_id",
             'route_id' => "{$required}|integer|exists:tour_routes,route_id",
-            'shift_date' => "{$required}|date|after_or_equal:today",
+            'shift_date' => "{$required}|date|after_or_equal:".TourismClock::today(),
             'shift_type' => [$required, Rule::in(GuideShift::TYPES)],
             'start_time' => "{$required}|date_format:H:i",
             'end_time' => "{$required}|date_format:H:i",
