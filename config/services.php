@@ -62,6 +62,8 @@ return [
         'timezone' => env('TOURISM_TIMEZONE', 'Asia/Jakarta'),
         // Rahasia HMAC webhook payment gateway. Kosong = webhook ditolak (503).
         'webhook_secret' => env('PAYMENT_WEBHOOK_SECRET', ''),
+        // Simulator pembayaran otomatis (gratis, untuk demo/pengembangan). Set false di produksi dengan uang asli.
+        'payment_simulator' => (bool) env('PAYMENT_SIMULATOR_ENABLED', false),
     ],
 
     // Groq (vision, text, dan Whisper untuk transkripsi audio)

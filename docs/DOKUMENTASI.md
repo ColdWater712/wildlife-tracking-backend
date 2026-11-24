@@ -83,6 +83,12 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
 
+### Simulator payment gateway otomatis (2026-11-26)
+
+- **Endpoint baru `POST /visitor/bookings/{code}/simulate-payment`** (`permission:book_tickets`, rate limit 20/menit): mensimulasikan pembayaran QRIS, Virtual Account (`va_bca`, `va_bni`, `va_bri`, `va_mandiri`), dan E-Wallet (`gopay`, `ovo`, `dana`, `shopeepay`) dengan `outcome` `paid` atau `failed`. Ketika `paid`, backend memanggil `BookingService::markPaid` secara atomik sehingga status pemesanan langsung menjadi `paid` dan e-tiket QR terbit otomatis tanpa verifikasi manual petugas.
+- **Konfigurasi**: `PAYMENT_SIMULATOR_ENABLED` di `.env` (default `false` di `config/services.php`, `true` di `.env.example` untuk demo/pengembangan). `GET /tourism/payment-info` mengembalikan `simulator_enabled`, dan `php artisan security:check` memberi peringatan bila simulator masih aktif di lingkungan produksi.
+- **Test**: `PaymentSimulatorTest` (3 skenario: nonaktif 503, simulasi berhasil + isolasi pemilik/IDOR, dan simulasi gagal lalu ulang bayar).
+
 ### Pembaruan panduan Apidog, konsistensi dokumentasi & audit dependensi (2026-11-26)
 
 - **`test.md` (Apidog)** diperbarui agar selaras dengan `docs/API.md` dan `routes/api.php` (249 endpoint, 6 akun uji termasuk `loket@` dan `pengunjung@wildlife.id`, token perangkat, wisata, POS loket, ensiklopedia satwa 3D, Midtrans Snap, CAPTCHA daftar).

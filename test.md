@@ -304,6 +304,7 @@ Password default seluruh akun seed adalah `password123` (wajib direset di server
 | Batalkan pemesanan | POST | `/visitor/bookings/{code}/cancel` | - | 200/409 |
 | Unggah bukti bayar | POST | `/visitor/bookings/{code}/payment-proof` | Multipart: `file` (jpg/png/webp/pdf ≤ 5 MB) | 200/422 |
 | Bayar online (Midtrans Snap) | POST | `/visitor/bookings/{code}/pay-online` | - | 200/503 |
+| Simulasi pembayaran otomatis (gratis) | POST | `/visitor/bookings/{code}/simulate-payment` | `{"channel":"qris","outcome":"paid"}` | 200/409/503 |
 | Ambil payload tiket QR | GET | `/visitor/bookings/{code}/ticket` | - | 200/409 |
 | Kirim ulasan pasca check-in | POST | `/visitor/bookings/{code}/review` | `{"route_rating":5,"guide_rating":5,"comment":"Pemandu informatif"}` | 201/409/422 |
 

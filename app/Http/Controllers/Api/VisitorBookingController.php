@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\Booking;
+use App\Models\Payment;
 use App\Models\TourReview;
 use App\Services\Tourism\BookingService;
 use App\Services\Tourism\MidtransService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 /**
@@ -154,6 +156,68 @@ class VisitorBookingController extends ApiController
             'redirect_url' => $result['redirect_url'],
             'reference' => $result['payment']->reference,
         ], 'Lanjutkan pembayaran di halaman Midtrans.');
+    }
+
+    /**
+     * Simulator payment gateway gratis (QRIS / Virtual Account / E-Wallet) untuk pengembangan & demo.
+     * Memverifikasi pembayaran secara otomatis lewat BookingService::markPaid tanpa campur tangan petugas.
+     */
+    public function simulatePayment(Request $request, string $code)
+    {
+        if (! config('services.tourism.payment_simulator')) {
+            return $this->error('Simulator pembayaran tidak aktif.', 503);
+        }
+
+        $data = $request->validate([
+            'channel' => ['required', Rule::in(['qris', 'va_bca', 'va_bni', 'va_bri', 'va_mandiri', 'gopay', 'ovo', 'dana', 'shopeepay'])],
+            'outcome' => ['sometimes', Rule::in(['paid', 'failed'])],
+        ]);
+
+        $this->bookings->expireStale();
+        $booking = $this->own($request, $code);
+        if ($booking->status !== 'pending_payment' || ($booking->expires_at && $booking->expires_at->isPast())) {
+            return $this->error('Pemesanan tidak sedang menunggu pembayaran.', 409);
+        }
+
+        $outcome = $data['outcome'] ?? 'paid';
+        $channel = $data['channel'];
+
+        $payment = $booking->payments()->create([
+            'reference' => 'SIM-'.strtoupper(Str::random(10)),
+            'method' => 'gateway',
+            'amount' => $booking->total_amount,
+            'external_reference' => $channel,
+            'status' => 'pending',
+        ]);
+
+        if ($outcome === 'failed') {
+            $payment->status = 'rejected';
+            $payment->rejection_reason = "Simulasi pembayaran gagal melalui kanal {$channel}.";
+            $payment->save();
+
+            return $this->success([
+                'booking' => $this->present($booking->fresh()->load(self::RELATIONS)),
+                'simulation' => [
+                    'channel' => $channel,
+                    'outcome' => 'failed',
+                    'transaction_id' => null,
+                    'verified_automatically' => false,
+                ],
+            ], 'Simulasi pembayaran gagal. Anda dapat mencoba kanal lain.');
+        }
+
+        $txId = 'SIM-'.strtoupper($channel).'-'.strtoupper(Str::random(10));
+        $booking = $this->bookings->markPaid($payment, null, $txId);
+
+        return $this->success([
+            'booking' => $this->present($booking->load(self::RELATIONS)),
+            'simulation' => [
+                'channel' => $channel,
+                'outcome' => 'paid',
+                'transaction_id' => $txId,
+                'verified_automatically' => true,
+            ],
+        ], 'Pembayaran terverifikasi otomatis. E-tiket siap digunakan.');
     }
 
     private function own(Request $request, string $code): Booking

@@ -338,6 +338,7 @@ $routes = function () {
             Route::post('bookings/{code}/payment-proof', [VisitorBookingController::class, 'uploadProof'])->middleware('throttle:10,1,visitor-proof');
             Route::get('bookings/{code}/ticket', [VisitorBookingController::class, 'ticket']);
             Route::post('bookings/{code}/pay-online', [VisitorBookingController::class, 'payOnline'])->middleware('throttle:10,1,visitor-pay-online');
+            Route::post('bookings/{code}/simulate-payment', [VisitorBookingController::class, 'simulatePayment'])->middleware('throttle:20,1,visitor-simulate-payment');
             Route::post('bookings/{code}/review', [VisitorBookingController::class, 'review'])->middleware('throttle:10,1,visitor-review');
         });
 

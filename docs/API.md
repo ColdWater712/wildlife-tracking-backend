@@ -175,6 +175,7 @@ Pengunjung (`book_tickets`):
 | POST | `/visitor/bookings/{code}/payment-proof` | Multipart `file` (jpg/png/webp/pdf, maks. 5 MB) |
 | GET | `/visitor/bookings/{code}/ticket` | `qr_payload` setelah lunas (`409` sebelumnya) |
 | POST | `/visitor/bookings/{code}/pay-online` | Midtrans Snap → `redirect_url` (503 bila `MIDTRANS_SERVER_KEY` kosong) |
+| POST | `/visitor/bookings/{code}/simulate-payment` | Simulator gateway gratis (`channel`: `qris\|va_bca\|va_bni\|va_bri\|va_mandiri\|gopay\|ovo\|dana\|shopeepay`, `outcome?`: `paid\|failed`) → verifikasi otomatis & terbit tiket (503 bila `PAYMENT_SIMULATOR_ENABLED=false`) |
 | POST | `/visitor/bookings/{code}/review` | `route_rating 1-5, guide_rating?, comment?` setelah check-in, sekali |
 
 Status pemesanan: `pending_payment` → `awaiting_verification` → `paid` → `checked_in` → `completed`

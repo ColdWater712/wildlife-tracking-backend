@@ -25,6 +25,7 @@ class SecurityCheck extends Command
             ['Kunci Groq terisi (fallback AI)', (string) config('services.groq.key') !== '', 'SARAN', 'GROQ_API_KEY (rotasi bila pernah tersebar)'],
             ['Rahasia webhook pembayaran ≥ 32 karakter', strlen((string) config('services.tourism.webhook_secret')) === 0 || strlen((string) config('services.tourism.webhook_secret')) >= 32, 'WAJIB', 'PAYMENT_WEBHOOK_SECRET panjang & acak (atau kosongkan untuk menonaktifkan webhook)'],
             ['Rekening tujuan wisata diisi', (string) config('services.tourism.bank_account_number') !== '', 'SARAN', 'TOURISM_BANK_* di .env'],
+            ['Simulator pembayaran mati di produksi', ! ($production && config('services.tourism.payment_simulator')), 'SARAN', 'Set PAYMENT_SIMULATOR_ENABLED=false di produksi dengan uang asli'],
             ['Proxy tepercaya dikonfigurasi', config('app.trusted_proxies') !== [], 'SARAN', 'TRUSTED_PROXIES=127.0.0.1 bila FE/cloudflared di mesin yang sama (rate limit per IP asli)'],
         ];
 

@@ -176,8 +176,9 @@ class TourismCatalogController extends ApiController
             ],
             'qris_merchant_name' => $config['qris_merchant_name'] ?: null,
             'payment_window_minutes' => (int) $config['payment_window_minutes'],
-            'gateway_enabled' => ($config['webhook_secret'] ?? '') !== '' || MidtransService::enabled(),
+            'gateway_enabled' => ($config['webhook_secret'] ?? '') !== '' || MidtransService::enabled() || (bool) ($config['payment_simulator'] ?? false),
             'midtrans_enabled' => MidtransService::enabled(),
+            'simulator_enabled' => (bool) ($config['payment_simulator'] ?? false),
         ]);
     }
 
