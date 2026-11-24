@@ -14,7 +14,7 @@ php artisan serve
 ```
 
 Skema migrasi dirapikan ulang, jadi database lama perlu `migrate:fresh --seed`.
-Akun seed (password `password123`): `admin@`, `peneliti@`, `lapangan@`, `kebijakan@wildlife.id`.
+Akun seed (password `password123`): `admin@`, `peneliti@`, `lapangan@`, `kebijakan@`, `loket@`, `pengunjung@wildlife.id`.
 
 ## Format respons
 
@@ -61,17 +61,18 @@ Semua relasi antar tabel memakai ID (FK), bukan nama.
 
 ## Permission per role
 
-| Permission | konservasionis | peneliti | admin | kebijakan |
-|---|:-:|:-:|:-:|:-:|
-| view_data | ✓ | ✓ | ✓ | ✓ |
-| create_data / update_data | ✓ | ✓ | ✓ | |
-| upload_media | ✓ | ✓ | ✓ | ✓ |
-| verify_ai | ✓ | ✓ | ✓ | |
-| manage_master_data | | ✓ | ✓ | |
-| view_reports / export_data | | ✓ | ✓ | ✓ |
-| delete_data / manage_users / manage_roles | | | ✓ | |
-| manage_tourism | | | ✓ | |
-| validate_tickets | ✓ | | ✓ | |
+| Permission | konservasionis | peneliti | admin | kebijakan | loket |
+|---|:-:|:-:|:-:|:-:|:-:|
+| view_data | ✓ | ✓ | ✓ | ✓ | |
+| create_data / update_data | ✓ | ✓ | ✓ | | |
+| upload_media | ✓ | ✓ | ✓ | ✓ | |
+| verify_ai | ✓ | ✓ | ✓ | | |
+| manage_master_data | | ✓ | ✓ | | |
+| view_reports / export_data | | ✓ | ✓ | ✓ | |
+| delete_data / manage_users / manage_roles | | | ✓ | | |
+| manage_tourism | | | ✓ | | |
+| sell_tickets | | | ✓ | | ✓ |
+| validate_tickets | ✓ | | ✓ | | ✓ |
 
 Role `pengunjung` (daftar sendiri lewat `POST /register`) hanya punya `book_tickets` dan tidak bisa membaca data konservasi.
 
@@ -138,6 +139,8 @@ Alias path: `devices` = `tracking-devices`, `incidents` = `incident-reports`,
 | POST | `/media-uploads/{id}/predictions` | picu analisis untuk media yang sudah ada |
 | GET | `/ai/threats` | deteksi ancaman (`?min_level=medium`) |
 | GET | `/ai/summary-report` | ringkasan eksekutif + statistik + `ai_insights` |
+| GET | `/ai/recap` | rekap data AI per periode (`start_date`, `end_date`) |
+| GET/POST/DELETE | `/staff-faces` | galeri wajah staf (biometrik, khusus `manage_users`) |
 | GET | `/ai/vocabulary` | label Indonesia untuk kondisi, perilaku, kategori suara, tingkat ancaman |
 | POST | `/ai/detect-objects` | analisis cepat gambar tanpa disimpan |
 | GET | `/ai/health` | status engine AI |

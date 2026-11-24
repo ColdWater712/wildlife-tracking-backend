@@ -83,6 +83,13 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
 
+### Pembaruan panduan Apidog, konsistensi dokumentasi & audit dependensi (2026-11-26)
+
+- **`test.md` (Apidog)** diperbarui agar selaras dengan `docs/API.md` dan `routes/api.php` (249 endpoint, 6 akun uji termasuk `loket@` dan `pengunjung@wildlife.id`, token perangkat, wisata, POS loket, ensiklopedia satwa 3D, Midtrans Snap, CAPTCHA daftar).
+- **`docs/API.md`** dilengkapi dengan akun seed `loket@` & `pengunjung@wildlife.id`, baris role `loket` (`sell_tickets`, `validate_tickets`) di tabel permission, serta endpoint `GET /ai/recap` dan `/staff-faces`.
+- **`.gitignore`** menambahkan `AGENTS.md` agar berkas asisten lokal tidak pernah ter-commit.
+- **Audit**: `phpunit` 130/130 lulus (922 assertion), `security:check` bersih untuk konfigurasi (password seed `password123` wajib direset di server via `users:reset-default-passwords`), `composer audit` menemukan 8 advisory pada 5 paket (`laravel/framework`, `symfony/http-foundation`, `symfony/http-kernel`, `symfony/mime`, `symfony/routing`) untuk ditinjau pada siklus pembaruan paket berikutnya.
+
 ### Ensiklopedia satwa 3D, pembayaran online, token perangkat & penutupan risiko (2026-11-26)
 
 **Ensiklopedia satwa 3D** (untuk peneliti, konservasionis, pengunjung, dan petugas loket):
@@ -615,6 +622,7 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | 25 | Data | Token idle menumpuk di database | `tokens:prune-idle` terjadwal tiap jam |
 | 26 | Integrasi | `/pos/sessions` tanpa `summary` sehingga halaman FE crash | Bentuk data sama dengan detail sesi |
 | 27 | Proses | Tidak ada cara cepat memeriksa konfigurasi berbahaya sebelum server dibuka | `php artisan security:check` + `users:reset-default-passwords` |
+| 28 | Dokumentasi | `test.md` (Apidog) memakai endpoint & format lama | Diperbarui sesuai `docs/API.md` dan `routes/api.php` |
 
 ### Masih berisiko / perlu keputusan
 
@@ -630,7 +638,7 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Integrasi FE | `GET /devices` juga mengembalikan kamera/perekam | Halaman kalung bercampur | FE pakai `?device_type=gps` |
 | Database | Migrasi lama digabung | `migrate:fresh --seed` menghapus data | Skrip migrasi data bila ada data produksi |
 | Data | File media tanpa antivirus & kebijakan retensi (token idle sudah dibersihkan otomatis tiap jam) | Storage membesar | Kebijakan retensi media + pemindai antivirus (ClamAV) di server |
-| Proses | Commit tidak ditandatangani; `test.md` (Apidog) belum diperbarui | Label "Unverified"; tester pakai endpoint lama | Signing bila wajib; perbarui `test.md` |
+| Proses | Commit tidak ditandatangani | Label "Unverified" | Signing bila wajib |
 | AI suara | Tembakan jauh di hutan lebat: 63% (Vietnam) dan 1/6 pada rekaman malam kontinu; kembang api sering terbaca tembakan | Tembakan bisa terlewat | Latih ulang dengan rekaman lokasi sendiri (`ai-service/training`) |
 | AI gambar | Spesies Sumatra (badak, gajah, orangutan) belum diuji dengan foto Sumatra; makaka & kancil sering hanya tingkat famili | Spesies bisa kosong/umum | Uji & fine-tune dengan foto kamera jebak Sumatra |
 | AI gambar | Kondisi fisik, perilaku, senjata/jerat/penebangan/api masih dari Groq (LLM), bukan model terlatih | Bisa salah/halusinasi | Wajib verifikasi petugas; latih model dari data verifikasi |
