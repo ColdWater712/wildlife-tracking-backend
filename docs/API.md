@@ -186,6 +186,24 @@ Pengelola (`manage_tourism`), prefix `/tourism/admin`: `routes` (GET/POST, `{id}
 Webhook gateway: `POST /payments/webhook`, header `X-Signature: hex(HMAC-SHA256(body, PAYMENT_WEBHOOK_SECRET))`,
 body `{reference, status: paid|failed, amount, transaction_id}`.
 
+### POS loket (walk-in)
+
+Kasir (`sell_tickets`; role `petugas_loket` dan admin). Kasir hanya melihat sesi & transaksinya sendiri.
+
+| Method | Path | Keterangan |
+|---|---|---|
+| GET | `/pos/session` | Sesi terbuka milik kasir (`null` bila belum buka) + `expected_cash_now` + `summary` |
+| POST | `/pos/session/open` | `counter_name, opening_cash`. `409` bila masih ada sesi terbuka |
+| POST | `/pos/session/close` | `counted_cash, note?` → `expected_cash`, `cash_difference` (counted − expected) |
+| GET | `/pos/sessions?date=&cashier_id=` | Riwayat sesi (admin: semua kasir) |
+| GET | `/pos/sessions/{id}` | Laporan sesi + daftar `sales` |
+| GET | `/pos/sales` | Transaksi sesi yang sedang terbuka |
+| POST | `/pos/sales` | `route_id, shift_id, wni_count, wna_count, student_count, drone_count?, contact_name, contact_phone?, emergency_contact?, notes?, participants?[{full_name?, visitor_type, age?}], payment_method (cash/qris/edc), received_amount (wajib untuk cash), external_reference?, check_in_now?`. Respons memuat `total_amount`, `payments[0].change_amount`, `qr_payload`. `409` tanpa sesi / kuota habis; `422` uang kurang / shift sudah lewat 30 menit |
+| GET | `/pos/sales/{code}` | Data struk + `qr_payload` (cetak ulang) |
+| POST | `/pos/sales/{code}/void` | `reason` (min. 5). Hanya kasir penjual & sesi terbuka |
+
+Laporan harian (`manage_tourism`): `GET /pos/report?date=YYYY-MM-DD` → `summary{transactions, voided, visitors, gross, pnbp, guide_fee, by_method, by_channel}` + `sessions`. Dihitung per tanggal pembayaran (zona `TOURISM_TIMEZONE`).
+
 ## Pipeline AI
 
 ```

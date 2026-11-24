@@ -1,6 +1,6 @@
 # Dokumentasi Backend Wildlife Tracking
 
-Diperbarui: 2026-11-23 · Laravel 13 + Sanctum · 178 endpoint REST (juga di `/api/v1`) · 102 test lulus.
+Diperbarui: 2026-11-25 · Laravel 13 + Sanctum · 234 endpoint REST (juga di `/api/v1`) · 110 test lulus.
 
 Dokumen ini adalah rujukan utama untuk tim frontend dan backend: fitur yang sudah siap, cara memanggilnya,
 apa yang berubah di setiap rilis, fitur yang masih dikembangkan, dan hasil audit terakhir.
@@ -29,7 +29,7 @@ Isi:
 | Header wajib | `Accept: application/json`; `Content-Type: application/json` kecuali upload file (multipart) |
 | Sesi | Token dicabut jika tidak dipakai lebih dari 2 jam (`API_IDLE_TIMEOUT`, menit). Respons `401` |
 | CORS | Origin frontend diatur lewat `FRONTEND_URLS` (default `http://localhost:3000,http://127.0.0.1:3000`) |
-| Akun uji | `admin@`, `peneliti@`, `lapangan@`, `kebijakan@wildlife.id`, password `password123` |
+| Akun uji | `admin@`, `peneliti@`, `lapangan@`, `kebijakan@`, `loket@`, `pengunjung@wildlife.id`, password `password123` |
 
 Format respons selalu sama:
 
@@ -82,6 +82,35 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 ## 2. Apa yang diubah
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
+
+### POS loket wisata & perbaikan zona waktu (2026-11-25)
+
+Penjualan tiket walk-in di loket (Point of Sales) untuk pengunjung yang datang langsung tanpa pesan online.
+
+| Area | Isi | Endpoint |
+|---|---|---|
+| Role & izin baru | Role `petugas_loket` (`sell_tickets` + `validate_tickets`), akun contoh `loket@wildlife.id`. Admin otomatis punya `sell_tickets` | - |
+| Sesi kas | Kasir membuka sesi (nama loket + modal kembalian), satu sesi terbuka per kasir. Saat tutup, sistem menghitung kas seharusnya (modal + tunai sah) dan mencatat selisih dengan hitungan fisik | `GET /pos/session`, `POST /pos/session/open`, `POST /pos/session/close`, `GET /pos/sessions`, `GET /pos/sessions/{id}` |
+| Penjualan | Pilih rute + shift (hari ini atau nanti), jumlah WNI/WNA/pelajar/drone. Harga dihitung server (sama dengan online, termasuk tarif libur). Bayar tunai (uang diterima → kembalian), QRIS, atau EDC (kode approval). Langsung lunas, tiket QR terbit, opsi langsung check-in. Nama peserta boleh dilengkapi belakangan (otomatis "Peserta n") | `POST /pos/sales`, `GET /pos/sales`, `GET /pos/sales/{code}` |
+| Kuota | Kuota shift dipakai bersama dengan pemesanan online dan dikunci di transaksi. Shift yang sudah mulai masih bisa dijual sampai 30 menit setelah jam mulai | - |
+| Void | Kasir yang sama, selama sesi masih terbuka, wajib alasan. Tiket langsung tidak berlaku. Setelah sesi ditutup hanya admin yang bisa membatalkan (refund) | `POST /pos/sales/{code}/void` |
+| Laporan harian | Gabungan online + loket per tanggal pembayaran (WIB): jumlah transaksi & pengunjung per kategori, per metode bayar, per kanal, dan **PNBP dipisah dari jasa pemandu** (PNBP wajib disetor ke kas negara) | `GET /pos/report?date=` (`manage_tourism`) |
+
+Perbaikan dalam rilis ini:
+
+- **Zona waktu wisata.** `APP_TIMEZONE` adalah UTC, sedangkan jam shift ditulis dalam WIB. Akibatnya batas "pemesanan ditutup 2 jam sebelum shift", check-in "hanya di tanggal kunjungan", dan daftar kunjungan hari ini meleset 7 jam. Sekarang semua perhitungan wisata memakai `TourismClock`, dengan zona waktu dari `TOURISM_TIMEZONE` (default `Asia/Jakarta`). Data GPS dan log tetap UTC.
+- **Rate limit.** Semua route `throttle:N,1` tanpa prefix ternyata berbagi satu penghitung per user atau IP. Contohnya, 6× membuka katalog lalu daftar akun langsung `429`, dan penjualan kasir menghabiskan jatah buka/tutup sesi. Setiap grup sekarang punya prefix sendiri, misalnya `throttle:5,1,register`.
+- Seeder membuat shift mulai hari ini agar loket bisa langsung dicoba.
+- Pembeli walk-in tidak punya akun, sehingga `bookings.user_id` sekarang boleh kosong. Transaksi seperti ini tidak muncul di "Pesanan Saya" siapa pun dan tidak bisa diulas.
+
+Migrasi baru `2026_11_25_000001_add_pos_to_tourism`:
+
+- Tabel baru `pos_sessions`.
+- `bookings.channel`, `pos_session_id`, `sold_by`.
+- `payments.method` bertambah `cash` dan `edc`.
+- `payments.received_amount`, `change_amount`, `external_reference`.
+
+Rollback migrasi ini ditolak bila sudah ada transaksi POS, supaya data penjualan tidak hilang. Variabel `.env` baru (opsional): `TOURISM_TIMEZONE`. Test baru: `PosTest` (8).
 
 ### Modul wisata: pengunjung, tiket, tur, pemandu, transaksi (2026-11-24)
 
@@ -251,22 +280,23 @@ laporan agregat, ekspor, dan dokumentasi API.
 Akses dicek dari tabel `role_permissions` (middleware `permission:`). Frontend menyembunyikan tombol
 berdasarkan `data.user.permissions` dari `/login` atau `/me`; akses yang ditolak menghasilkan `403`.
 
-| Permission | Untuk apa | Konservasionis | Peneliti | Admin | Kebijakan | Pengunjung |
-|---|---|:-:|:-:|:-:|:-:|:-:|
-| `view_data` | Baca semua data, dashboard, AI | ✓ | ✓ | ✓ | ✓ | |
-| `create_data` | Tambah insiden, GPS, kunjungan zona, cuaca, telemetri, rekaman perangkat | ✓ | ✓ | ✓ | | |
-| `update_data` | Ubah insiden, tutup kunjungan zona | ✓ | ✓ | ✓ | | |
-| `upload_media` | Upload ke AI | ✓ | ✓ | ✓ | ✓ | |
-| `verify_ai` | Verifikasi & retry prediksi AI | ✓ | ✓ | ✓ | | |
-| `manage_master_data` | Spesies, satwa, perangkat, zona | | ✓ | ✓ | | |
-| `view_reports` | Laporan agregat | | ✓ | ✓ | ✓ | |
-| `export_data` | Ekspor CSV/GeoJSON | | ✓ | ✓ | ✓ | |
-| `delete_data` | Hapus insiden/prediksi/media/laporan, ubah `sync-status` | | | ✓ | | |
-| `manage_users` | User, token, activity log | | | ✓ | | |
-| `manage_roles` | Role & permission | | | ✓ | | |
-| `book_tickets` | Pesan tiket/tur, bayar, lihat tiket, tulis ulasan | | | ✓ | | ✓ |
-| `manage_tourism` | Kelola rute, pemandu, shift, tarif, pemesanan, verifikasi bayar | | | ✓ | | |
-| `validate_tickets` | Check-in tiket di pintu masuk | ✓ | | ✓ | | |
+| Permission | Untuk apa | Konservasionis | Peneliti | Admin | Kebijakan | Petugas loket | Pengunjung |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| `view_data` | Baca semua data, dashboard, AI | ✓ | ✓ | ✓ | ✓ | | |
+| `create_data` | Tambah insiden, GPS, kunjungan zona, cuaca, telemetri, rekaman perangkat | ✓ | ✓ | ✓ | | | |
+| `update_data` | Ubah insiden, tutup kunjungan zona | ✓ | ✓ | ✓ | | | |
+| `upload_media` | Upload ke AI | ✓ | ✓ | ✓ | ✓ | | |
+| `verify_ai` | Verifikasi & retry prediksi AI | ✓ | ✓ | ✓ | | | |
+| `manage_master_data` | Spesies, satwa, perangkat, zona | | ✓ | ✓ | | | |
+| `view_reports` | Laporan agregat | | ✓ | ✓ | ✓ | | |
+| `export_data` | Ekspor CSV/GeoJSON | | ✓ | ✓ | ✓ | | |
+| `delete_data` | Hapus insiden/prediksi/media/laporan, ubah `sync-status` | | | ✓ | | | |
+| `manage_users` | User, token, activity log | | | ✓ | | | |
+| `manage_roles` | Role & permission | | | ✓ | | | |
+| `book_tickets` | Pesan tiket/tur, bayar, lihat tiket, tulis ulasan | | | ✓ | | | ✓ |
+| `manage_tourism` | Kelola rute, pemandu, shift, tarif, pemesanan, verifikasi bayar | | | ✓ | | | |
+| `validate_tickets` | Check-in tiket di pintu masuk | ✓ | | ✓ | | ✓ | |
+| `sell_tickets` | POS loket: sesi kas, jual tiket walk-in, void, struk | | | ✓ | | ✓ | |
 
 Role `pengunjung` dibuat lewat pendaftaran mandiri `POST /register` dan **tidak punya `view_data`**, jadi
 semua data konservasi (satwa, GPS, AI, insiden, pengguna) menolaknya dengan `403`.
@@ -276,8 +306,9 @@ Aturan tambahan:
 - Insiden hanya bisa diubah oleh pelapornya atau admin.
 - Admin tidak bisa menonaktifkan, menghapus, atau mengganti role akunnya sendiri, dan tidak bisa
   mencabut `manage_roles` dari role-nya sendiri.
-- Empat role bawaan tidak bisa diganti nama atau dihapus (namanya dipakai untuk target notifikasi).
-- Endpoint publik `/register` tidak ada; akun baru dibuat admin lewat `POST /users`.
+- Enam role bawaan tidak bisa diganti nama atau dihapus (namanya dipakai untuk target notifikasi).
+- `POST /register` hanya membuat akun `pengunjung`; akun staf (termasuk `petugas_loket`) dibuat admin lewat `POST /users`.
+- Kasir hanya melihat sesi dan transaksinya sendiri; void hanya oleh kasir penjual selama sesinya terbuka.
 
 ---
 
@@ -523,7 +554,11 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Unggahan berbahaya | Bukti bayar hanya jpg/png/webp/pdf ≤ 5 MB, disimpan privat, dibuka lewat endpoint staf dengan `nosniff` | ✓ |
 | XSS lewat ulasan | Tag HTML dibuang sebelum disimpan | ✓ |
 | Data pribadi | Kontak pemandu tidak dikirim; nama pengulas disingkat; nomor identitas peserta tidak disimpan | ✓ |
-| Brute force / spam | Rate limit: daftar 5/menit, login 5 percobaan, pesan & unggah 10/menit, katalog 60/menit | - |
+| Brute force / spam | Rate limit per grup (prefix terpisah): daftar 5/menit, login 5 percobaan, pesan & unggah 10/menit, katalog 60/menit, POS jual 60/menit | - |
+| POS: kasir mengubah harga | Harga dihitung `PricingService`; input harga/status diabaikan | ✓ `PosTest` |
+| POS: kas hilang / void fiktif | Void wajib alasan, hanya kasir penjual & sesi terbuka; tiket void langsung tidak berlaku; selisih kas tercatat permanen saat tutup | ✓ `PosTest` |
+| POS: overbooking online + loket | Kuota bersama dikunci `lockForUpdate` | ✓ `PosTest` |
+| POS: kasir melihat transaksi kasir lain | Sesi/transaksi difilter `cashier_id`; laporan harian hanya `manage_tourism` | ✓ `PosTest` |
 
 ### Sudah diperbaiki
 
@@ -587,6 +622,10 @@ integrasi frontend, endpoint, dan konsistensi. Setiap temuan yang diperbaiki dib
 | Wisata: data | Rute, pemandu, jadwal, dan jasa pemandu di seeder adalah contoh; libur nasional hanya yang bertanggal tetap | Harga/jadwal tidak sesuai lapangan | Isi data asli lewat `/tourism/admin/*` sebelum dibuka ke publik; tambahkan libur Idul Fitri dll. tiap tahun |
 | Wisata: tarif | Tarif PP 36/2024 diambil dari pemberitaan (Kompas/Detik) karena situs BBTNGL tidak bisa diakses saat pengembangan | Selisih bila ada ketentuan lokal | Cocokkan dengan pengumuman resmi BBTNGL; ubah lewat `PUT /tourism/admin/prices/{id}` |
 | Wisata: pembatalan | Pengembalian dana (refund) hanya dicatat statusnya; transfer balik dilakukan manual | Dana tertahan bila petugas lupa | SOP refund & integrasi gateway |
+| POS: setoran PNBP | Laporan memisahkan PNBP dan jasa pemandu, tetapi setoran ke kas negara (SIMPONI) masih manual | Salah setor bila laporan tidak dicek | SOP rekonsiliasi harian; integrasi SIMPONI bila tersedia |
+| POS: printer | Struk dicetak lewat dialog print browser (kertas 58/80 mm); belum ada ESC/POS langsung ke printer thermal | Perlu klik print tiap transaksi | Atur printer thermal sebagai default + kiosk printing Chrome, atau aplikasi bridge ESC/POS |
+| POS: offline | Loket butuh koneksi ke server; belum ada mode offline | Loket berhenti saat internet putus | Mode offline + sinkronisasi (butuh desain antikonflik kuota) |
+| Rate limit di balik proxy FE | Permintaan tamu dari FE (server action) tampak berasal dari IP server Next.js, jadi semua tamu berbagi kuota daftar/login per IP | Daftar/login bisa `429` saat ramai | Teruskan `X-Forwarded-For` dari FE + `TrustProxies`, atau limiter per email |
 | Wisata: akun | Pendaftaran terbuka; belum ada verifikasi email/CAPTCHA (sudah rate limit 5/menit) | Akun spam | Tambah verifikasi email atau CAPTCHA sebelum go-live |
 
 ---

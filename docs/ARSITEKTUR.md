@@ -130,6 +130,7 @@ Controller hanya memvalidasi input, memanggil model/service, lalu mengembalikan 
 | `VisitorBookingController.php` | `/visitor/bookings` | Pemesanan milik pengunjung: pesan, batal, bukti bayar, tiket QR, ulasan |
 | `TourismAdminController.php` | `/tourism/admin/*` | Kelola rute, pemandu, shift, tarif, libur, pemesanan, verifikasi bayar, ulasan |
 | `TicketCheckInController.php` | `/tourism/check-in` | Check-in tiket di pintu masuk |
+| `PosController.php` | `/pos/*` | POS loket: sesi kas, jual walk-in, void, struk, laporan harian |
 | `PaymentWebhookController.php` | `/payments/webhook` | Notifikasi payment gateway bertanda tangan HMAC |
 
 ### 3.4 `app/Http/Middleware/` dan `Traits/`
@@ -164,6 +165,7 @@ Satu model = satu tabel. Primary key memakai nama `<entitas>_id` (mis. `animal_i
 | `TicketPrice`, `PublicHoliday` | `ticket_prices`, `public_holidays` | Tarif PNBP & hari libur |
 | `TourRoute`, `TourGuide`, `GuideShift` | `tour_routes`, `tour_guides`, `guide_shifts` | Paket tur, profil pemandu, jadwal shift |
 | `Booking`, `BookingParticipant`, `Payment`, `TourReview` | `bookings`, `booking_participants`, `payments`, `tour_reviews` | Pemesanan, peserta, transaksi, ulasan |
+| `PosSession` | `pos_sessions` | Sesi kas kasir loket (modal awal, kas seharusnya, hitungan fisik, selisih) |
 | `AggregateReport` | `aggregate_reports` | Laporan periodik tersimpan |
 | `WeatherData` | `weather_data` | Cuaca per titik GPS |
 | `ActivityLog` | `activity_log` | Jejak aktivitas user |
@@ -186,6 +188,8 @@ Logika yang dipakai lebih dari satu tempat. Controller memanggil service, bukan 
 | `AiRecapService.php` | Rekap Data AI per periode: total, spesies, individu, wajah, suara, ancaman, per zona, per hari |
 | `Tourism/PricingService.php` | Hitung harga di server: tiket masuk per orang per hari (tarif hari kerja/libur), jasa pemandu, drone |
 | `Tourism/BookingService.php` | Pesan dengan kunci kuota, kedaluwarsa, bukti bayar, lunas/tolak, batal, token tiket HMAC, check-in |
+| `Tourism/PosService.php` | Sesi kas kasir, penjualan walk-in langsung lunas, kembalian, void, tutup kas + selisih, ringkasan (PNBP vs jasa pemandu) |
+| `Tourism/TourismClock.php` | Waktu lokal kawasan (`TOURISM_TIMEZONE`, default WIB) untuk jam shift & "hari ini"; app tetap UTC |
 
 ### 3.7 `app/Services/Ai/`
 
@@ -233,8 +237,9 @@ File bawaan Laravel yang membaca `.env`. Yang diubah proyek ini:
 | `2026_11_22_000002_create_animal_embeddings_table` | Galeri re-identifikasi satwa |
 | `2026_11_23_000001_create_staff_faces_and_face_results` | Galeri wajah staf + kolom `faces`, `staff_face_count`, `unknown_face_count` di `ai_predictions` |
 | `2026_11_24_000001_create_tourism_tables` | Modul wisata: tarif, libur, rute, pemandu, shift, pemesanan, peserta, pembayaran, ulasan |
+| `2026_11_25_000001_add_pos_to_tourism` | POS: `pos_sessions`, kanal penjualan & kasir di `bookings`, metode tunai/EDC + kembalian di `payments` |
 
-**Seeder:** `DatabaseSeeder` memanggil `RolePermissionSeeder` → `UserSeeder` (4 akun, password `password123`) → `SpeciesSeeder` → `GeoZoneSeeder` → `AnimalSeeder` → `TrackingDeviceSeeder` → `GpsReadingSeeder` → `IncidentReportSeeder` → `NotificationSeeder` → `AiSampleSeeder` → `TourismSeeder` (tarif PP 36/2024, 4 rute, 4 pemandu, shift 14 hari).
+**Seeder:** `DatabaseSeeder` memanggil `RolePermissionSeeder` → `UserSeeder` (6 akun, password `password123`) → `SpeciesSeeder` → `GeoZoneSeeder` → `AnimalSeeder` → `TrackingDeviceSeeder` → `GpsReadingSeeder` → `IncidentReportSeeder` → `NotificationSeeder` → `AiSampleSeeder` → `TourismSeeder` (tarif PP 36/2024, 4 rute, 4 pemandu, shift hari ini + 14 hari).
 
 ### 3.11 `ai-service/`
 
