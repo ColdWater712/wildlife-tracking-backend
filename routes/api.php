@@ -41,14 +41,15 @@ use Illuminate\Support\Facades\Route;
 
 $routes = function () {
     // ---------------------------------------------------------------- Auth (publik)
-    Route::middleware('throttle:20,1')->group(function () {
+    // Prefix throttle wajib: tanpa prefix, semua route throttle memakai satu penghitung per user/IP yang sama.
+    Route::middleware('throttle:20,1,auth')->group(function () {
         Route::post('login', [AuthController::class, 'login']);
         Route::post('auth/login', [AuthController::class, 'login']);
     });
 
     // ---------------------------------------------------------------- Wisata: publik (tanpa login)
-    Route::post('register', [AuthController::class, 'register'])->middleware('throttle:5,1');
-    Route::middleware('throttle:60,1')->prefix('tourism')->group(function () {
+    Route::post('register', [AuthController::class, 'register'])->middleware('throttle:5,1,register');
+    Route::middleware('throttle:60,1,tourism-catalog')->prefix('tourism')->group(function () {
         Route::get('routes', [TourismCatalogController::class, 'routes']);
         Route::get('routes/{slug}', [TourismCatalogController::class, 'showRoute'])->where('slug', '[a-z0-9-]+');
         Route::get('guides', [TourismCatalogController::class, 'guides']);
@@ -60,7 +61,7 @@ $routes = function () {
         Route::get('payment-info', [TourismCatalogController::class, 'paymentInfo']);
     });
     // Notifikasi payment gateway; keaslian dicek lewat tanda tangan HMAC, bukan login.
-    Route::post('payments/webhook', PaymentWebhookController::class)->middleware('throttle:120,1');
+    Route::post('payments/webhook', PaymentWebhookController::class)->middleware('throttle:120,1,payment-webhook');
 
     Route::middleware(['auth:sanctum', 'log.activity'])->group(function () {
 
@@ -268,7 +269,7 @@ $routes = function () {
             Route::get('ai/vocabulary', [AiInsightController::class, 'vocabulary']);
         });
 
-        Route::middleware(['permission:upload_media', 'throttle:30,1'])->group(function () {
+        Route::middleware(['permission:upload_media', 'throttle:30,1,ai-upload'])->group(function () {
             Route::post('ai/upload', [AiPredictionController::class, 'upload']);
             Route::post('media-uploads', [AiPredictionController::class, 'upload']);
             Route::post('ai/detect-objects', [AiInsightController::class, 'detectObjects']);
@@ -312,17 +313,17 @@ $routes = function () {
         // ------------------------------------------------------------ Wisata: pengunjung
         Route::middleware('permission:book_tickets')->prefix('visitor')->group(function () {
             Route::get('bookings', [VisitorBookingController::class, 'index']);
-            Route::post('bookings', [VisitorBookingController::class, 'store'])->middleware('throttle:10,1');
+            Route::post('bookings', [VisitorBookingController::class, 'store'])->middleware('throttle:10,1,visitor-booking');
             Route::get('bookings/{code}', [VisitorBookingController::class, 'show']);
             Route::post('bookings/{code}/cancel', [VisitorBookingController::class, 'cancel']);
-            Route::post('bookings/{code}/payment-proof', [VisitorBookingController::class, 'uploadProof'])->middleware('throttle:10,1');
+            Route::post('bookings/{code}/payment-proof', [VisitorBookingController::class, 'uploadProof'])->middleware('throttle:10,1,visitor-proof');
             Route::get('bookings/{code}/ticket', [VisitorBookingController::class, 'ticket']);
-            Route::post('bookings/{code}/review', [VisitorBookingController::class, 'review'])->middleware('throttle:10,1');
+            Route::post('bookings/{code}/review', [VisitorBookingController::class, 'review'])->middleware('throttle:10,1,visitor-review');
         });
 
         // ------------------------------------------------------------ Wisata: check-in tiket
         Route::middleware('permission:validate_tickets')->prefix('tourism/check-in')->group(function () {
-            Route::post('/', [TicketCheckInController::class, 'checkIn'])->middleware('throttle:60,1');
+            Route::post('/', [TicketCheckInController::class, 'checkIn'])->middleware('throttle:60,1,ticket-check-in');
             Route::get('today', [TicketCheckInController::class, 'today']);
         });
 
