@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\ApiSessionService;
+use App\Services\RegistrationGuard;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
@@ -24,7 +25,7 @@ class AuthController extends ApiController
         ]);
 
         $login = $request->filled('email') ? Str::lower($request->email) : $request->username;
-        $throttleKey = 'login:' . $login . '|' . $request->ip();
+        $throttleKey = 'login:'.$login.'|'.$request->ip();
 
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
             $seconds = RateLimiter::availableIn($throttleKey);
@@ -69,6 +70,12 @@ class AuthController extends ApiController
      * Pendaftaran mandiri pengunjung. Role selalu "pengunjung" (tidak bisa dipilih dari input),
      * sehingga pendaftar tidak pernah mendapat akses ke data konservasi.
      */
+    /** Soal keamanan untuk formulir pendaftaran (publik). */
+    public function registerChallenge()
+    {
+        return $this->success(RegistrationGuard::enabled() ? RegistrationGuard::issue() : null);
+    }
+
     public function register(Request $request)
     {
         $data = $request->validate([
@@ -77,7 +84,14 @@ class AuthController extends ApiController
             'email' => 'required|email|max:150|unique:users,email',
             'phone' => 'nullable|string|max:30',
             'password' => ['required', 'string', 'confirmed', Password::min(8)->letters()->numbers()],
+            // Honeypot: tidak terlihat oleh manusia di FE; bot yang mengisinya ditolak.
+            'website' => 'prohibited',
+            'captcha_token' => RegistrationGuard::enabled() ? 'required|string|max:500' : 'nullable',
+            'captcha_answer' => RegistrationGuard::enabled() ? 'required' : 'nullable',
         ]);
+        if (RegistrationGuard::enabled()) {
+            RegistrationGuard::verify($data['captcha_token'], $data['captcha_answer']);
+        }
 
         $roleId = Role::where('name_role', 'pengunjung')->value('role_id');
         if (! $roleId) {

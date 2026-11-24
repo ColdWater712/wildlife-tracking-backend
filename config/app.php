@@ -68,6 +68,13 @@ return [
     'timezone' => 'UTC',
 
     /*
+     | Proxy tepercaya (koma). Hanya permintaan dari IP ini yang header X-Forwarded-For-nya dipakai
+     | sebagai IP klien (untuk rate limit & log). Contoh: "127.0.0.1" bila FE Next.js / cloudflared
+     | berjalan di mesin yang sama. Kosong = tidak percaya proxy mana pun (aman, default).
+     */
+    'trusted_proxies' => array_values(array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', ''))))),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------

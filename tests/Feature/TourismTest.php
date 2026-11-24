@@ -66,13 +66,13 @@ class TourismTest extends TestCase
 
     private function registerVisitor(string $username = 'budi'): array
     {
-        $token = $this->postJson('/api/register', [
+        $token = $this->postJson('/api/register', $this->withCaptcha([
             'full_name' => 'Budi Santoso',
             'username' => $username,
             'email' => "{$username}@contoh.id",
             'password' => 'rahasia123',
             'password_confirmation' => 'rahasia123',
-        ])->assertCreated()->json('data.token');
+        ]))->assertCreated()->json('data.token');
         $this->app['auth']->forgetGuards();
 
         return ['Authorization' => "Bearer {$token}", 'Accept' => 'application/json'];
@@ -83,11 +83,11 @@ class TourismTest extends TestCase
     public function test_registration_always_creates_visitor_role_without_access_to_conservation_data(): void
     {
         $admin = User::where('username', 'admin')->first();
-        $res = $this->postJson('/api/register', [
+        $res = $this->postJson('/api/register', $this->withCaptcha([
             'full_name' => 'Penyusup', 'username' => 'penyusup', 'email' => 'penyusup@contoh.id',
             'password' => 'rahasia123', 'password_confirmation' => 'rahasia123',
             'role_id' => $admin->role_id, 'status' => 'aktif',
-        ])->assertCreated();
+        ]))->assertCreated();
 
         $this->assertSame('pengunjung', $res->json('data.user.name_role'));
         $this->assertSame(['book_tickets'], $res->json('data.user.permissions'));
@@ -102,10 +102,10 @@ class TourismTest extends TestCase
 
     public function test_registration_requires_strong_password_and_unique_email(): void
     {
-        $this->postJson('/api/register', [
+        $this->postJson('/api/register', $this->withCaptcha([
             'full_name' => 'A', 'username' => 'a1', 'email' => 'admin@wildlife.id',
             'password' => 'pendek', 'password_confirmation' => 'pendek',
-        ])->assertUnprocessable()->assertJsonValidationErrors(['email', 'password']);
+        ]))->assertUnprocessable()->assertJsonValidationErrors(['email', 'password']);
     }
 
     public function test_public_catalog_needs_no_login_and_hides_private_guide_data(): void

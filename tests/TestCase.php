@@ -13,6 +13,16 @@ abstract class TestCase extends BaseTestCase
 
     protected bool $seed = false;
 
+    /** Tambahkan jawaban CAPTCHA pendaftaran yang benar ke payload POST /register. */
+    protected function withCaptcha(array $payload): array
+    {
+        $challenge = $this->getJson('/api/register/challenge')->assertOk()->json('data');
+        preg_match('/(\d+) ([+-]) (\d+)/', $challenge['question'], $m);
+        $answer = $m[2] === '+' ? (int) $m[1] + (int) $m[3] : (int) $m[1] - (int) $m[3];
+
+        return $payload + ['captcha_token' => $challenge['challenge_token'], 'captcha_answer' => $answer];
+    }
+
     protected function seedAll(): void
     {
         $this->seed(DatabaseSeeder::class);
@@ -23,7 +33,7 @@ abstract class TestCase extends BaseTestCase
     {
         $class = "App\\Models\\{$model}";
 
-        return (int) $class::query()->where($column, $value)->value((new $class())->getKeyName());
+        return (int) $class::query()->where($column, $value)->value((new $class)->getKeyName());
     }
 
     /** Login lewat endpoint asli dan kembalikan header Authorization. */

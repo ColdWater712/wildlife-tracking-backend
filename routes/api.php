@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\AnimalController;
 use App\Http\Controllers\Api\AnimalGeoZoneController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\DeviceTokenController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\GeoZoneController;
 use App\Http\Controllers\Api\GpsReadingController;
@@ -27,6 +28,7 @@ use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VisitorBookingController;
 use App\Http\Controllers\Api\WeatherDataController;
 use App\Http\Controllers\Api\WildlifeCatalogController;
+use App\Http\Middleware\RestrictDeviceTokens;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -51,6 +53,7 @@ $routes = function () {
 
     // ---------------------------------------------------------------- Wisata: publik (tanpa login)
     Route::post('register', [AuthController::class, 'register'])->middleware('throttle:5,1,register');
+    Route::get('register/challenge', [AuthController::class, 'registerChallenge'])->middleware('throttle:30,1,register-challenge');
     Route::middleware('throttle:60,1,tourism-catalog')->prefix('tourism')->group(function () {
         Route::get('routes', [TourismCatalogController::class, 'routes']);
         Route::get('routes/{slug}', [TourismCatalogController::class, 'showRoute'])->where('slug', '[a-z0-9-]+');
@@ -71,7 +74,7 @@ $routes = function () {
     });
     Route::post('payments/webhook', PaymentWebhookController::class)->middleware('throttle:120,1,payment-webhook');
 
-    Route::middleware(['auth:sanctum', 'log.activity'])->group(function () {
+    Route::middleware(['auth:sanctum', RestrictDeviceTokens::class, 'log.activity'])->group(function () {
 
         // ------------------------------------------------------------ Auth & profil
         Route::post('logout', [AuthController::class, 'logout']);
@@ -200,6 +203,9 @@ $routes = function () {
                 Route::delete("{$prefix}/{id}", [TrackingDeviceController::class, 'destroy']);
                 Route::patch("{$prefix}/{id}/assign-animal", [TrackingDeviceController::class, 'assignAnimal']);
                 Route::delete("{$prefix}/{id}/assign-animal", [TrackingDeviceController::class, 'unassignAnimal']);
+                Route::get("{$prefix}/{id}/api-token", [DeviceTokenController::class, 'show']);
+                Route::post("{$prefix}/{id}/api-token", [DeviceTokenController::class, 'store'])->middleware('throttle:10,1,device-token');
+                Route::delete("{$prefix}/{id}/api-token", [DeviceTokenController::class, 'destroy']);
                 Route::patch("{$prefix}/{id}/condition", [TrackingDeviceController::class, 'updateCondition']);
                 Route::patch("{$prefix}/{id}/status", [TrackingDeviceController::class, 'updateStatus']);
             }

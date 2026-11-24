@@ -36,6 +36,12 @@ return [
     ],
 
     // Modul wisata: tiket, tur, pembayaran.
+    'registration' => [
+        // CAPTCHA hitungan bertanda tangan untuk POST /register (false = nonaktif, mis. untuk uji lokal).
+        'captcha' => (bool) env('REGISTRATION_CAPTCHA', true),
+        'captcha_min_seconds' => (int) env('REGISTRATION_CAPTCHA_MIN_SECONDS', 2),
+    ],
+
     'tourism' => [
         // Batas waktu bayar sebelum pemesanan kedaluwarsa dan kuota dilepas.
         'payment_window_minutes' => (int) env('TOURISM_PAYMENT_WINDOW_MINUTES', 60),

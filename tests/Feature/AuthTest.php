@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\User;
+use Illuminate\Routing\Middleware\ThrottleRequests;
 use Tests\TestCase;
 
 class AuthTest extends TestCase
@@ -36,7 +38,7 @@ class AuthTest extends TestCase
 
     public function test_inactive_user_cannot_login(): void
     {
-        \App\Models\User::where('username', 'lapangan')->update(['status' => 'nonaktif']);
+        User::where('username', 'lapangan')->update(['status' => 'nonaktif']);
 
         $this->postJson('/api/login', ['email' => 'lapangan@wildlife.id', 'password' => 'password123'])->assertForbidden();
     }
@@ -56,14 +58,38 @@ class AuthTest extends TestCase
     /** Registrasi publik hanya untuk pengunjung; akun staf tetap dibuat admin lewat /users. */
     public function test_public_registration_only_creates_visitor_accounts(): void
     {
-        $res = $this->postJson('/api/register', [
+        $res = $this->postJson('/api/register', $this->withCaptcha([
             'full_name' => 'Tamu', 'username' => 'tamu', 'email' => 'tamu@contoh.id',
             'password' => 'rahasia123', 'password_confirmation' => 'rahasia123',
             'role' => 'administrator_sistem',
-        ])->assertCreated();
+        ]))->assertCreated();
 
         $this->assertSame('pengunjung', $res->json('data.user.name_role'));
         $this->assertNotContains('view_data', $res->json('data.user.permissions'));
+    }
+
+    public function test_registration_captcha_blocks_bots(): void
+    {
+        // Rate limit (5/menit) diuji terpisah; di sini fokus pada CAPTCHA.
+        $this->withoutMiddleware(ThrottleRequests::class);
+        $base = ['full_name' => 'Bot', 'username' => 'bot1', 'email' => 'bot@contoh.id', 'password' => 'rahasia123', 'password_confirmation' => 'rahasia123'];
+
+        // Tanpa soal, jawaban salah, token dipalsukan, honeypot terisi: semuanya ditolak.
+        $this->postJson('/api/register', $base)->assertUnprocessable()->assertJsonValidationErrors('captcha_token');
+        $wrong = $this->withCaptcha($base);
+        $this->postJson('/api/register', ['captcha_answer' => $wrong['captcha_answer'] + 1] + $wrong)->assertUnprocessable()->assertJsonValidationErrors('captcha_answer');
+        $this->postJson('/api/register', ['captcha_token' => 'eyJhIjoxfQ.palsu'] + $this->withCaptcha($base))->assertUnprocessable();
+        $this->postJson('/api/register', $this->withCaptcha($base + ['website' => 'http://spam.example']))->assertUnprocessable()->assertJsonValidationErrors('website');
+
+        // Jawaban benar berhasil sekali; token yang sama tidak bisa dipakai ulang.
+        $ok = $this->withCaptcha($base);
+        $this->postJson('/api/register', $ok)->assertCreated();
+        $this->postJson('/api/register', ['username' => 'bot2', 'email' => 'bot2@contoh.id'] + $ok)->assertUnprocessable()->assertJsonValidationErrors('captcha_answer');
+
+        // Diisi terlalu cepat.
+        config(['services.registration.captcha_min_seconds' => 5]);
+        $this->postJson('/api/register', $this->withCaptcha(['username' => 'bot3', 'email' => 'bot3@contoh.id'] + $base))
+            ->assertUnprocessable()->assertJsonValidationErrors('captcha_answer');
     }
 
     public function test_change_password(): void

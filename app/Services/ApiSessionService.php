@@ -72,6 +72,11 @@ class ApiSessionService
             return false;
         }
 
+        // Token perangkat lapangan tidak kedaluwarsa karena idle (lingkupnya dibatasi RestrictDeviceTokens).
+        if (collect($token->abilities ?? [])->contains(fn ($ability) => is_string($ability) && str_starts_with($ability, 'device:'))) {
+            return true;
+        }
+
         if (self::isExpired($token)) {
             self::forget($token->id);
             $token->delete();
