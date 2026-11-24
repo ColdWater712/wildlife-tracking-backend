@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\TrackingDeviceController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VisitorBookingController;
 use App\Http\Controllers\Api\WeatherDataController;
+use App\Http\Controllers\Api\WildlifeCatalogController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -62,6 +63,12 @@ $routes = function () {
         Route::get('payment-info', [TourismCatalogController::class, 'paymentInfo']);
     });
     // Notifikasi payment gateway; keaslian dicek lewat tanda tangan HMAC, bukan login.
+    // Ensiklopedia satwa (profil spesies + model 3D). Tanpa data individu/lokasi.
+    Route::middleware('throttle:60,1,wildlife-catalog')->prefix('wildlife')->group(function () {
+        Route::get('species', [WildlifeCatalogController::class, 'index']);
+        Route::get('species/{id}', [WildlifeCatalogController::class, 'show'])->whereNumber('id');
+        Route::get('species/{id}/model', [WildlifeCatalogController::class, 'model'])->whereNumber('id');
+    });
     Route::post('payments/webhook', PaymentWebhookController::class)->middleware('throttle:120,1,payment-webhook');
 
     Route::middleware(['auth:sanctum', 'log.activity'])->group(function () {
@@ -128,6 +135,7 @@ $routes = function () {
         Route::middleware('permission:view_data')->group(function () {
             Route::get('species', [SpeciesController::class, 'index']);
             Route::get('species/{id}', [SpeciesController::class, 'show']);
+            Route::get('species/{id}/model', [SpeciesController::class, 'model'])->whereNumber('id');
 
             Route::get('animals', [AnimalController::class, 'index']);
             Route::get('animals/{id}', [AnimalController::class, 'show']);
@@ -176,6 +184,8 @@ $routes = function () {
             Route::post('species', [SpeciesController::class, 'store']);
             Route::put('species/{id}', [SpeciesController::class, 'update']);
             Route::delete('species/{id}', [SpeciesController::class, 'destroy']);
+            Route::post('species/{id}/model', [SpeciesController::class, 'uploadModel'])->middleware('throttle:10,1,species-model');
+            Route::delete('species/{id}/model', [SpeciesController::class, 'deleteModel']);
 
             Route::post('animals', [AnimalController::class, 'store']);
             Route::put('animals/{id}', [AnimalController::class, 'update']);

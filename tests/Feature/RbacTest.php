@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AiPrediction;
 use Tests\TestCase;
 
 class RbacTest extends TestCase
@@ -45,13 +46,13 @@ class RbacTest extends TestCase
         $this->getJson('/api/aggregate-reports', $headers)->assertOk();
         $this->getJson('/api/export/incidents/csv', $headers)->assertOk();
         $this->postJson('/api/incidents', [], $headers)->assertForbidden();
-        $this->postJson('/api/ai-predictions/' . \App\Models\AiPrediction::value('prediction_id') . '/verify', [], $headers)->assertForbidden();
+        $this->postJson('/api/ai-predictions/'.AiPrediction::value('prediction_id').'/verify', [], $headers)->assertForbidden();
     }
 
     public function test_researcher_manages_master_data(): void
     {
         $this->postJson('/api/species', [
-            'common_name' => 'Beruang Madu', 'scientific_name' => 'Helarctos malayanus', 'conservation_status' => 'Vulnerable',
+            'common_name' => 'Tapir Asia', 'scientific_name' => 'Tapirus indicus', 'conservation_status' => 'Endangered',
         ], $this->loginAs('peneliti'))->assertCreated();
     }
 
@@ -87,6 +88,6 @@ class RbacTest extends TestCase
 
         $this->patchJson("/api/users/{$user['user_id']}/status", ['status' => 'nonaktif'], $headers)->assertOk();
         $this->deleteJson("/api/users/{$user['user_id']}", [], $headers)->assertOk();
-        $this->deleteJson('/api/users/' . $this->idOf('User', 'username', 'admin'), [], $headers)->assertStatus(422);
+        $this->deleteJson('/api/users/'.$this->idOf('User', 'username', 'admin'), [], $headers)->assertStatus(422);
     }
 }

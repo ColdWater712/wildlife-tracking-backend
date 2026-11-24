@@ -12,9 +12,35 @@ class Species extends Model
     public static $snakeAttributes = false;
 
     protected $table = 'species';
+
     protected $primaryKey = 'species_id';
 
-    protected $fillable = ['common_name', 'scientific_name', 'conservation_status'];
+    protected $fillable = [
+        'common_name', 'scientific_name', 'conservation_status', 'local_names', 'taxon_class', 'taxon_order', 'taxon_family',
+        'description', 'characteristics', 'size_weight', 'lifespan', 'activity_pattern', 'diet', 'behavior', 'habitat',
+        'distribution', 'population_estimate', 'threats', 'fun_facts', 'legal_protection', 'model_credit', 'model_hotspots', 'is_public',
+    ];
+
+    /** Lokasi berkas model tidak pernah dikirim; klien memakai has_model + endpoint file. */
+    protected $hidden = ['model_path'];
+
+    protected $appends = ['has_model'];
+
+    protected function casts(): array
+    {
+        return [
+            'characteristics' => 'array',
+            'threats' => 'array',
+            'fun_facts' => 'array',
+            'model_hotspots' => 'array',
+            'is_public' => 'boolean',
+        ];
+    }
+
+    public function getHasModelAttribute(): bool
+    {
+        return $this->model_path !== null;
+    }
 
     public function animals()
     {

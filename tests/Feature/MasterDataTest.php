@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\AnimalGeoZone;
+use App\Models\IncidentReport;
 use App\Models\Notification;
+use App\Models\Species;
 use Tests\TestCase;
 
 class MasterDataTest extends TestCase
@@ -49,7 +51,7 @@ class MasterDataTest extends TestCase
     public function test_pagination_via_headers(): void
     {
         $this->getJson('/api/species?page=1&per_page=2', $this->h)
-            ->assertOk()->assertJsonCount(2, 'data')->assertHeader('X-Total-Count', 5);
+            ->assertOk()->assertJsonCount(2, 'data')->assertHeader('X-Total-Count', Species::count());
     }
 
     public function test_animal_crud_with_frontend_payload(): void
@@ -75,7 +77,7 @@ class MasterDataTest extends TestCase
 
     public function test_species_delete_is_blocked_when_referenced(): void
     {
-        $this->deleteJson('/api/species/' . $this->orangutanSpecies(), [], $this->h)->assertStatus(409);
+        $this->deleteJson('/api/species/'.$this->orangutanSpecies(), [], $this->h)->assertStatus(409);
     }
 
     public function test_device_types_and_assignment(): void
@@ -90,7 +92,7 @@ class MasterDataTest extends TestCase
             ->assertOk()->assertJsonPath('data.animal.name', 'ORN-02');
         $this->patchJson("/api/devices/{$gps['device_id']}/assign-animal", ['animal_id' => $this->animal('ORN-01')], $this->h)->assertStatus(409);
         $this->deleteJson("/api/devices/{$gps['device_id']}/assign-animal", [], $this->h)->assertOk()->assertJsonPath('data.animal_id', null);
-        $this->deleteJson('/api/devices/' . $this->device('GPS-0001'), [], $this->h)->assertStatus(409);
+        $this->deleteJson('/api/devices/'.$this->device('GPS-0001'), [], $this->h)->assertStatus(409);
     }
 
     public function test_geo_zone_accepts_polygon_string_and_rejects_invalid(): void
@@ -142,7 +144,7 @@ class MasterDataTest extends TestCase
 
     public function test_incident_update_and_sync_status(): void
     {
-        $id = \App\Models\IncidentReport::whereHas('reporter', fn ($q) => $q->where('username', 'admin'))->value('report_id');
+        $id = IncidentReport::whereHas('reporter', fn ($q) => $q->where('username', 'admin'))->value('report_id');
         $this->putJson("/api/incidents/{$id}", ['status' => 'resolved', 'description' => 'Selesai ditangani'], $this->h)
             ->assertOk()->assertJsonPath('data.status', 'resolved');
         $this->patchJson("/api/incidents/{$id}/sync-status", ['sync_status' => 'failed'], $this->h)->assertOk();
