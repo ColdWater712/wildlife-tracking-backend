@@ -10,7 +10,7 @@ class Payment extends Model
 
     protected $primaryKey = 'payment_id';
 
-    protected $fillable = ['booking_id', 'reference', 'method', 'amount', 'status'];
+    protected $fillable = ['booking_id', 'reference', 'method', 'amount', 'received_amount', 'change_amount', 'external_reference', 'status'];
 
     protected $hidden = ['proof_path'];
 
@@ -18,7 +18,7 @@ class Payment extends Model
 
     protected function casts(): array
     {
-        return ['amount' => 'integer', 'paid_at' => 'datetime'];
+        return ['amount' => 'integer', 'received_amount' => 'integer', 'change_amount' => 'integer', 'paid_at' => 'datetime'];
     }
 
     public function getHasProofAttribute(): bool

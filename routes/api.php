@@ -13,18 +13,19 @@ use App\Http\Controllers\Api\GeoZoneController;
 use App\Http\Controllers\Api\GpsReadingController;
 use App\Http\Controllers\Api\IncidentReportController;
 use App\Http\Controllers\Api\NotificationController;
+use App\Http\Controllers\Api\PaymentWebhookController;
 use App\Http\Controllers\Api\PermissionController;
+use App\Http\Controllers\Api\PosController;
 use App\Http\Controllers\Api\RoleController;
 use App\Http\Controllers\Api\SpeciesController;
 use App\Http\Controllers\Api\StaffFaceController;
-use App\Http\Controllers\Api\TrackingDeviceController;
-use App\Http\Controllers\Api\UserController;
-use App\Http\Controllers\Api\WeatherDataController;
-use App\Http\Controllers\Api\PaymentWebhookController;
 use App\Http\Controllers\Api\TicketCheckInController;
 use App\Http\Controllers\Api\TourismAdminController;
 use App\Http\Controllers\Api\TourismCatalogController;
+use App\Http\Controllers\Api\TrackingDeviceController;
+use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VisitorBookingController;
+use App\Http\Controllers\Api\WeatherDataController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -326,6 +327,20 @@ $routes = function () {
             Route::post('/', [TicketCheckInController::class, 'checkIn'])->middleware('throttle:60,1,ticket-check-in');
             Route::get('today', [TicketCheckInController::class, 'today']);
         });
+
+        // ------------------------------------------------------------ Wisata: POS loket (walk-in)
+        Route::middleware('permission:sell_tickets')->prefix('pos')->group(function () {
+            Route::get('session', [PosController::class, 'current']);
+            Route::post('session/open', [PosController::class, 'open'])->middleware('throttle:10,1,pos-session');
+            Route::post('session/close', [PosController::class, 'close'])->middleware('throttle:10,1,pos-session');
+            Route::get('sessions', [PosController::class, 'sessions']);
+            Route::get('sessions/{id}', [PosController::class, 'showSession'])->whereNumber('id');
+            Route::get('sales', [PosController::class, 'sales']);
+            Route::post('sales', [PosController::class, 'sell'])->middleware('throttle:60,1,pos-sale');
+            Route::get('sales/{code}', [PosController::class, 'showSale']);
+            Route::post('sales/{code}/void', [PosController::class, 'void'])->middleware('throttle:20,1,pos-void');
+        });
+        Route::middleware('permission:manage_tourism')->get('pos/report', [PosController::class, 'dailyReport']);
 
         // ------------------------------------------------------------ Wisata: pengelolaan
         Route::middleware('permission:manage_tourism')->prefix('tourism/admin')->group(function () {

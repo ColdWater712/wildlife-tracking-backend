@@ -16,7 +16,7 @@ class Booking extends Model
 
     /** Kolom status, harga, dan token tidak pernah diisi langsung dari input pengguna. */
     protected $fillable = [
-        'booking_code', 'user_id', 'route_id', 'shift_id', 'visit_date', 'day_type', 'wni_count', 'wna_count',
+        'booking_code', 'user_id', 'channel', 'pos_session_id', 'sold_by', 'route_id', 'shift_id', 'visit_date', 'day_type', 'wni_count', 'wna_count',
         'student_count', 'drone_count', 'participant_count', 'price_lines', 'total_amount', 'status', 'expires_at',
         'contact_name', 'contact_phone', 'emergency_contact', 'notes',
     ];
@@ -45,6 +45,16 @@ class Booking extends Model
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'user_id');
+    }
+
+    public function seller()
+    {
+        return $this->belongsTo(User::class, 'sold_by', 'user_id');
+    }
+
+    public function posSession()
+    {
+        return $this->belongsTo(PosSession::class, 'pos_session_id', 'session_id');
     }
 
     public function route()

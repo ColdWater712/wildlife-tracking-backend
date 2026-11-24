@@ -8,11 +8,10 @@ use App\Models\Notification;
 use App\Models\Payment;
 use App\Models\TourRoute;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -53,7 +52,7 @@ class BookingService
             if ($shift->route_id !== $route->route_id || $shift->status !== 'scheduled') {
                 throw ValidationException::withMessages(['shift_id' => 'Jadwal tidak tersedia untuk rute ini.']);
             }
-            $shiftStart = Carbon::parse($shift->shift_date->toDateString().' '.$shift->start_time);
+            $shiftStart = TourismClock::at($shift->shift_date->toDateString(), (string) $shift->start_time);
             if ($shiftStart->lte(now()->addHours(2))) {
                 throw ValidationException::withMessages(['shift_id' => 'Pemesanan ditutup 2 jam sebelum jadwal dimulai.']);
             }
@@ -113,7 +112,7 @@ class BookingService
     }
 
     /** @param array<int, array{full_name: string, visitor_type: string, age?: ?int}> $participants */
-    private function assertParticipants(TourRoute $route, array $participants, int $wni, int $wna, int $students): void
+    public function assertParticipants(TourRoute $route, array $participants, int $wni, int $wna, int $students): void
     {
         $counts = ['wni' => 0, 'wna' => 0, 'pelajar' => 0];
         foreach ($participants as $index => $participant) {
@@ -282,7 +281,7 @@ class BookingService
             if ($booking->status !== 'paid') {
                 throw new ConflictHttpException('Tiket belum lunas atau sudah dibatalkan.');
             }
-            if (! $booking->visit_date->isToday()) {
+            if ($booking->visit_date->toDateString() !== TourismClock::today()) {
                 throw new ConflictHttpException('Tiket berlaku untuk tanggal '.$booking->visit_date->format('d-m-Y').'.');
             }
 
@@ -297,6 +296,9 @@ class BookingService
 
     private function notifyOwner(Booking $booking, string $message): void
     {
+        if ($booking->user_id === null) {
+            return; // penjualan loket (walk-in) tidak punya akun pemilik
+        }
         Notification::create([
             'user_id' => $booking->user_id,
             'notification_type' => 'system',
@@ -305,8 +307,8 @@ class BookingService
         ]);
     }
 
-    /** @param class-string<\Illuminate\Database\Eloquent\Model> $model */
-    private function uniqueCode(string $model, string $column, string $prefix, int $length = 8): string
+    /** @param class-string<Model> $model */
+    public function uniqueCode(string $model, string $column, string $prefix, int $length = 8): string
     {
         do {
             // Tanpa huruf/angka yang mirip (0/O, 1/I) agar mudah dibacakan di loket.

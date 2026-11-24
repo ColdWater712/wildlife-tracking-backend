@@ -24,6 +24,7 @@ class RolePermissionSeeder extends Seeder
         'book_tickets' => 'Memesan tiket dan tur, membayar, dan menulis ulasan (pengunjung)',
         'manage_tourism' => 'Mengelola tur, pemandu, jadwal shift, tarif, pemesanan, dan verifikasi pembayaran',
         'validate_tickets' => 'Memeriksa (check-in) tiket pengunjung di pintu masuk',
+        'sell_tickets' => 'Menjual tiket walk-in di loket (POS), membuka/menutup sesi kas, dan mencetak struk',
     ];
 
     public const ROLES = [
@@ -43,6 +44,10 @@ class RolePermissionSeeder extends Seeder
         'pengambil_kebijakan' => [
             'description' => 'Pengambil kebijakan yang memantau laporan dan ringkasan',
             'permissions' => ['view_data', 'view_reports', 'upload_media', 'export_data'],
+        ],
+        'petugas_loket' => [
+            'description' => 'Kasir loket wisata: menjual tiket walk-in (POS) dan memeriksa tiket di pintu masuk',
+            'permissions' => ['sell_tickets', 'validate_tickets'],
         ],
         'pengunjung' => [
             'description' => 'Pengunjung/wisatawan yang memesan tiket dan tur (tidak bisa melihat data konservasi)',
