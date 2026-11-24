@@ -123,7 +123,7 @@ Alias path: `devices` = `tracking-devices`, `incidents` = `incident-reports`,
 | GET/POST | `/incidents/{id}/media` | unggah bukti; `analyze=1` untuk langsung dianalisis AI |
 | GET | `/weather-data`, `/weather-data/{id}` | |
 | POST | `/weather-data/ingest`, `/weather-data/sync` | ingest manual / tarik dari Open-Meteo |
-| GET/PATCH/DELETE | `/notifications`, `/notifications/{id}`, `/notifications/{id}/read`, `/notifications/read-all`, `/notifications/unread-count` | hanya milik user aktif |
+| GET/PATCH/DELETE | `/notifications`, `/notifications/{id}`, `/notifications/{id}/read`, `/notifications/read-all`, `/notifications/unread-count` | milik user aktif; tipe notifikasi dibatasi per role (no-show) |
 
 ### AI
 | Method | Path | Keterangan |

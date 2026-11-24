@@ -11,6 +11,38 @@ class NotificationService
     public const RESEARCH_ROLES = ['peneliti_ekologi', 'administrator_sistem'];
 
     /**
+     * Peta jenis notifikasi yang boleh dilihat tiap role (strict no-show untuk tipe di luar daftar).
+     *
+     * @var array<string, array<int, string>>
+     */
+    private const ROLE_ALLOWED_TYPES = [
+        'administrator_sistem' => ['risk_zone', 'device_alert', 'system'],
+        'konservasionis_lapangan' => ['risk_zone', 'device_alert', 'system'],
+        'peneliti_ekologi' => ['risk_zone', 'device_alert', 'system'],
+        'pengambil_kebijakan' => ['risk_zone', 'system'],
+        'petugas_loket' => ['system'],
+        'pengunjung' => ['system'],
+    ];
+
+    /**
+     * @return array<int, string>
+     */
+    public static function allowedTypesForRole(?string $roleName): array
+    {
+        return self::ROLE_ALLOWED_TYPES[$roleName ?? ''] ?? ['system'];
+    }
+
+    public static function canViewConservationRefs(?string $roleName): bool
+    {
+        return in_array($roleName, [
+            'administrator_sistem',
+            'konservasionis_lapangan',
+            'peneliti_ekologi',
+            'pengambil_kebijakan',
+        ], true);
+    }
+
+    /**
      * Kirim notifikasi ke semua user aktif dengan role tertentu.
      * Notifikasi identik dalam $dedupeMinutes terakhir tidak dikirim ulang.
      *
@@ -34,6 +66,16 @@ class NotificationService
 
     public function notifyUser(int $userId, string $type, string $message, array $refs = [], int $dedupeMinutes = 30): bool
     {
+        $roleName = User::query()
+            ->where('user_id', $userId)
+            ->with('role:role_id,name_role')
+            ->first()
+            ?->role?->name_role;
+
+        if (! in_array($type, self::allowedTypesForRole($roleName), true)) {
+            return false;
+        }
+
         $message = mb_substr($message, 0, 500);
 
         if ($dedupeMinutes > 0) {
@@ -49,13 +91,17 @@ class NotificationService
             }
         }
 
+        $allowedRefs = self::canViewConservationRefs($roleName)
+            ? array_intersect_key($refs, array_flip(['animal_id', 'zone_id', 'device_id', 'report_id', 'prediction_id']))
+            : [];
+
         Notification::create(array_merge([
             'user_id' => $userId,
             'notification_type' => $type,
             'message' => $message,
             'is_read' => false,
             'created_at' => now(),
-        ], array_intersect_key($refs, array_flip(['animal_id', 'zone_id', 'device_id', 'report_id', 'prediction_id']))));
+        ], $allowedRefs));
 
         return true;
     }

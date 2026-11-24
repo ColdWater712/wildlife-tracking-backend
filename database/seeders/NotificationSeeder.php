@@ -18,5 +18,17 @@ class NotificationSeeder extends Seeder
             'system',
             'Laporan harian siap diunduh.',
         );
+
+        $notifier->notifyRoles(
+            ['petugas_loket'],
+            'system',
+            'Loket POS siap digunakan. Periksa shift hari ini sebelum membuka sesi kasir.',
+        );
+
+        $notifier->notifyRoles(
+            ['pengunjung'],
+            'system',
+            'Selamat datang di TNGL E-Ticketing. Pantau status pemesanan dan e-tiket Anda di halaman Notifikasi.',
+        );
     }
 }

@@ -83,6 +83,14 @@ Alias agar frontend tidak perlu diubah — backend tetap menerima dan mengirim n
 
 Riwayat terbaru di atas. Setiap rilis wajib diikuti `php artisan migrate:fresh --seed` di database lokal/server.
 
+### Notifikasi per role dengan pembatasan ketat / no-show (2026-11-26)
+
+- **Visibilitas per role (`NotificationService`, `NotificationController`)**: seluruh 6 role dapat mengakses `/notifications`, namun tipe yang dikirim dan ditampilkan dibatasi ketat:
+  - `administrator_sistem`, `konservasionis_lapangan`, `peneliti_ekologi`: `risk_zone`, `device_alert`, `system` (+ relasi konservasi).
+  - `pengambil_kebijakan`: `risk_zone`, `system`.
+  - `petugas_loket`, `pengunjung`: hanya `system` (tanpa relasi konservasi; tipe di luar daftar tidak pernah dibuat dan disembunyikan dengan `404` no-show).
+- **Test**: `NotificationRoleVisibilityTest` (3 skenario).
+
 ### Simulator payment gateway otomatis (2026-11-26)
 
 - **Endpoint baru `POST /visitor/bookings/{code}/simulate-payment`** (`permission:book_tickets`, rate limit 20/menit): mensimulasikan pembayaran QRIS, Virtual Account (`va_bca`, `va_bni`, `va_bri`, `va_mandiri`), dan E-Wallet (`gopay`, `ovo`, `dana`, `shopeepay`) dengan `outcome` `paid` atau `failed`. Ketika `paid`, backend memanggil `BookingService::markPaid` secara atomik sehingga status pemesanan langsung menjadi `paid` dan e-tiket QR terbit otomatis tanpa verifikasi manual petugas.
