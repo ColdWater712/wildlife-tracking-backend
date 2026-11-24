@@ -8,9 +8,11 @@ use App\Models\TourGuide;
 use App\Models\TourReview;
 use App\Models\TourRoute;
 use App\Services\Tourism\BookingService;
+use App\Services\Tourism\MidtransService;
 use App\Services\Tourism\PricingService;
 use App\Services\Tourism\TourismClock;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -174,11 +176,12 @@ class TourismCatalogController extends ApiController
             ],
             'qris_merchant_name' => $config['qris_merchant_name'] ?: null,
             'payment_window_minutes' => (int) $config['payment_window_minutes'],
-            'gateway_enabled' => ($config['webhook_secret'] ?? '') !== '',
+            'gateway_enabled' => ($config['webhook_secret'] ?? '') !== '' || MidtransService::enabled(),
+            'midtrans_enabled' => MidtransService::enabled(),
         ]);
     }
 
-    /** @param \Illuminate\Support\Collection<int, GuideShift> $shifts */
+    /** @param Collection<int, GuideShift> $shifts */
     private function presentShifts($shifts): array
     {
         return $shifts->map(fn (GuideShift $s) => [

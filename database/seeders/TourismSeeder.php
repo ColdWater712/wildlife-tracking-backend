@@ -8,6 +8,7 @@ use App\Models\PublicHoliday;
 use App\Models\TicketPrice;
 use App\Models\TourGuide;
 use App\Models\TourRoute;
+use App\Services\Tourism\TourismClock;
 use Illuminate\Database\Seeder;
 
 /**
@@ -48,7 +49,7 @@ class TourismSeeder extends Seeder
         }
     }
 
-    /** Hanya libur nasional bertanggal tetap; libur berdasarkan kalender bulan/hijriah ditambahkan admin tiap tahun. */
+    /** Libur bertanggal tetap (tahun ini & depan) + libur kalender bulan/hijriah 2027 dari SKB. Tahun berikutnya ditambahkan admin. */
     private function holidays(): void
     {
         $year = (int) now()->format('Y');
@@ -61,6 +62,29 @@ class TourismSeeder extends Seeder
                 ['12-25', 'Hari Raya Natal'],
             ] as [$md, $name]) {
                 PublicHoliday::updateOrCreate(['holiday_date' => "{$y}-{$md}"], ['name' => $name]);
+            }
+        }
+
+        // Libur berbasis kalender bulan/hijriah 2027 (SKB 3 Menteri No. 1205, 3, 2 Tahun 2026, ditandatangani 15-09-2026),
+        // hanya tanggal yang konsisten di beberapa pemberitaan (Kompas, Detik, Hukumonline). Tanggal hari raya Islam bisa
+        // bergeser mengikuti Keputusan Menteri Agama; Nyepi 2027 (8/9 Maret) sengaja belum diisi karena sumber berbeda.
+        // Cuti bersama tidak dimasukkan: tarif PNBP "libur" hanya untuk Minggu & hari libur nasional.
+        if (now()->year <= 2027) {
+            foreach ([
+                ['2027-01-05', 'Isra Mikraj Nabi Muhammad SAW'],
+                ['2027-02-06', 'Tahun Baru Imlek 2578 Kongzili'],
+                ['2027-03-10', 'Hari Raya Idulfitri 1448 H (menunggu keputusan Menag)'],
+                ['2027-03-11', 'Hari Raya Idulfitri 1448 H (menunggu keputusan Menag)'],
+                ['2027-03-26', 'Wafat Yesus Kristus'],
+                ['2027-03-28', 'Kebangkitan Yesus Kristus (Paskah)'],
+                ['2027-05-06', 'Kenaikan Yesus Kristus'],
+                ['2027-05-17', 'Hari Raya Iduladha 1448 H (menunggu keputusan Menag)'],
+                ['2027-05-20', 'Hari Raya Waisak 2571 BE'],
+                ['2027-06-06', 'Tahun Baru Islam 1449 H'],
+                ['2027-08-15', 'Maulid Nabi Muhammad SAW'],
+                ['2027-12-26', 'Isra Mikraj Nabi Muhammad SAW 1449 H'],
+            ] as [$date, $name]) {
+                PublicHoliday::updateOrCreate(['holiday_date' => $date], ['name' => $name]);
             }
         }
     }
@@ -193,7 +217,7 @@ class TourismSeeder extends Seeder
 
         // Mulai hari ini (day 0) agar loket bisa langsung menjual tiket walk-in.
         for ($day = 0; $day <= 14; $day++) {
-            $date = \App\Services\Tourism\TourismClock::now()->addDays($day)->toDateString();
+            $date = TourismClock::now()->addDays($day)->toDateString();
             foreach ($plan as $i => [$slug, $guideIndex, $type, $start, $end]) {
                 // pemandu libur bergiliran: lewati satu kombinasi tiap hari
                 if (($day + $i) % 5 === 0) {

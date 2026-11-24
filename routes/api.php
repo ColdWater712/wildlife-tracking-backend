@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\GeoZoneController;
 use App\Http\Controllers\Api\GpsReadingController;
 use App\Http\Controllers\Api\IncidentReportController;
+use App\Http\Controllers\Api\MidtransNotificationController;
 use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\PaymentWebhookController;
 use App\Http\Controllers\Api\PermissionController;
@@ -72,6 +73,7 @@ $routes = function () {
         Route::get('species/{id}', [WildlifeCatalogController::class, 'show'])->whereNumber('id');
         Route::get('species/{id}/model', [WildlifeCatalogController::class, 'model'])->whereNumber('id');
     });
+    Route::post('payments/midtrans/notification', MidtransNotificationController::class)->middleware('throttle:120,1,midtrans');
     Route::post('payments/webhook', PaymentWebhookController::class)->middleware('throttle:120,1,payment-webhook');
 
     Route::middleware(['auth:sanctum', RestrictDeviceTokens::class, 'log.activity'])->group(function () {
@@ -335,6 +337,7 @@ $routes = function () {
             Route::post('bookings/{code}/cancel', [VisitorBookingController::class, 'cancel']);
             Route::post('bookings/{code}/payment-proof', [VisitorBookingController::class, 'uploadProof'])->middleware('throttle:10,1,visitor-proof');
             Route::get('bookings/{code}/ticket', [VisitorBookingController::class, 'ticket']);
+            Route::post('bookings/{code}/pay-online', [VisitorBookingController::class, 'payOnline'])->middleware('throttle:10,1,visitor-pay-online');
             Route::post('bookings/{code}/review', [VisitorBookingController::class, 'review'])->middleware('throttle:10,1,visitor-review');
         });
 

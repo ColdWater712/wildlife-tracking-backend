@@ -42,6 +42,14 @@ return [
         'captcha_min_seconds' => (int) env('REGISTRATION_CAPTCHA_MIN_SECONDS', 2),
     ],
 
+    'midtrans' => [
+        // Kosong = pembayaran online nonaktif (hanya transfer manual + verifikasi petugas).
+        'server_key' => env('MIDTRANS_SERVER_KEY', ''),
+        'production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
+        // Halaman FE tujuan setelah pembayaran; kode pemesanan ditambahkan di belakang.
+        'finish_url' => env('MIDTRANS_FINISH_URL', 'http://localhost:3000/bookings'),
+    ],
+
     'tourism' => [
         // Batas waktu bayar sebelum pemesanan kedaluwarsa dan kuota dilepas.
         'payment_window_minutes' => (int) env('TOURISM_PAYMENT_WINDOW_MINUTES', 60),

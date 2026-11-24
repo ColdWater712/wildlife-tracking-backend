@@ -188,6 +188,9 @@ class BookingService
             $payment->gateway_transaction_id = $gatewayTransactionId;
             $payment->save();
 
+            // Tagihan lain yang masih terbuka untuk pemesanan ini (mis. transfer manual) tidak berlaku lagi.
+            $booking->payments()->where('payment_id', '!=', $payment->payment_id)->where('status', 'pending')->update(['status' => 'expired']);
+
             $booking->status = 'paid';
             $booking->expires_at = null;
             $booking->ticket_token_hash = hash('sha256', $this->ticketToken($booking));

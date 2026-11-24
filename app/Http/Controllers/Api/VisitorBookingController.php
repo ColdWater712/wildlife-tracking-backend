@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Models\Booking;
 use App\Models\TourReview;
 use App\Services\Tourism\BookingService;
+use App\Services\Tourism\MidtransService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -129,6 +130,30 @@ class VisitorBookingController extends ApiController
         ]);
 
         return $this->success($review, 'Terima kasih atas ulasannya.', 201);
+    }
+
+    /** Bayar online lewat Midtrans Snap: kembalikan URL halaman pembayaran Midtrans. */
+    public function payOnline(Request $request, string $code, MidtransService $midtrans)
+    {
+        if (! MidtransService::enabled()) {
+            return $this->error('Pembayaran online belum diaktifkan pengelola.', 503);
+        }
+        $this->bookings->expireStale();
+        $booking = $this->own($request, $code);
+        if ($booking->status !== 'pending_payment' || ($booking->expires_at && $booking->expires_at->isPast())) {
+            return $this->error('Pemesanan tidak sedang menunggu pembayaran.', 409);
+        }
+
+        try {
+            $result = $midtrans->createTransaction($booking->load('user'));
+        } catch (\RuntimeException $e) {
+            return $this->error($e->getMessage(), 502);
+        }
+
+        return $this->success([
+            'redirect_url' => $result['redirect_url'],
+            'reference' => $result['payment']->reference,
+        ], 'Lanjutkan pembayaran di halaman Midtrans.');
     }
 
     private function own(Request $request, string $code): Booking
