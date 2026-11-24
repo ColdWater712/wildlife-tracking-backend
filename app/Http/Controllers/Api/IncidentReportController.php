@@ -3,14 +3,18 @@
 namespace App\Http\Controllers\Api;
 
 use App\Models\AiMediaUpload;
+use App\Models\Animal;
 use App\Models\IncidentReport;
 use App\Services\AiPredictionService;
 use App\Services\GeoService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class IncidentReportController extends ApiController
 {
+    public const STATUSES = ['pending', 'investigating', 'resolved', 'dismissed'];
+
     private const RELATIONS = ['reporter', 'animal', 'species', 'zone'];
 
     public function __construct(private GeoService $geo) {}
@@ -77,7 +81,14 @@ class IncidentReportController extends ApiController
             return $this->error('Hanya pelapor atau administrator yang dapat mengubah laporan ini.', 403);
         }
 
-        $incident->update($this->validated($request, $incident));
+        $data = $this->validated($request, $incident);
+        // Koordinat berubah tanpa zona eksplisit: hitung ulang zona dari koordinat baru.
+        $moved = (isset($data['latitude']) && (float) $data['latitude'] !== (float) $incident->latitude)
+            || (isset($data['longitude']) && (float) $data['longitude'] !== (float) $incident->longitude);
+        if ($moved && ! array_key_exists('zone_id', $data)) {
+            $data['zone_id'] = $this->geo->resolveZone($data['latitude'] ?? $incident->latitude, $data['longitude'] ?? $incident->longitude, 0)?->zone_id;
+        }
+        $incident->update($data);
 
         return $this->success($incident->fresh(self::RELATIONS), 'Laporan insiden diperbarui');
     }
@@ -136,18 +147,34 @@ class IncidentReportController extends ApiController
     {
         $required = $incident ? 'sometimes' : 'required';
 
-        return $request->validate([
+        $data = $request->validate([
             'incident_type' => "{$required}|string|max:100",
             'description' => "{$required}|string|max:5000",
-            'timestamp' => "{$required}|date|before_or_equal:" . now()->addMinutes(5)->toDateTimeString(),
+            'timestamp' => "{$required}|date|before_or_equal:".now()->addMinutes(5)->toDateTimeString(),
             'latitude' => "{$required}|numeric|between:-90,90",
             'longitude' => "{$required}|numeric|between:-180,180",
             'location' => 'nullable|string|max:255',
             'animal_id' => ['nullable', 'integer', Rule::exists('animals', 'animal_id')->whereNull('deleted_at')],
             'species_id' => ['nullable', 'integer', Rule::exists('species', 'species_id')->whereNull('deleted_at')],
-            'zone_id' => 'nullable|integer|exists:geo_zones,zone_id',
+            // Zona yang sudah dihapus (soft delete) tidak boleh dipilih lagi.
+            'zone_id' => ['nullable', 'integer', Rule::exists('geo_zones', 'zone_id')->whereNull('deleted_at')],
             'photo_url' => 'nullable|url|max:500',
-            'status' => 'sometimes|string|max:50',
+            'status' => ['sometimes', Rule::in(self::STATUSES)],
         ]);
+
+        // Satwa & spesies harus konsisten; spesies diisi otomatis dari satwa bila kosong.
+        $animalId = array_key_exists('animal_id', $data) ? $data['animal_id'] : $incident?->animal_id;
+        if ($animalId) {
+            $animalSpecies = Animal::whereKey($animalId)->value('species_id');
+            $speciesId = array_key_exists('species_id', $data) ? $data['species_id'] : $incident?->species_id;
+            if ($speciesId && (int) $speciesId !== (int) $animalSpecies) {
+                throw ValidationException::withMessages(['species_id' => 'Spesies tidak sesuai dengan satwa yang dipilih.']);
+            }
+            if (! $speciesId) {
+                $data['species_id'] = $animalSpecies;
+            }
+        }
+
+        return $data;
     }
 }

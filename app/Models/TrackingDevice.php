@@ -6,15 +6,29 @@ use Illuminate\Database\Eloquent\Model;
 
 class TrackingDevice extends Model
 {
+    /**
+     * Perangkat boleh mengirim data (GPS/telemetri/rekaman) hanya bila aktif dan tidak berstatus hilang.
+     * Data dari perangkat hilang bisa berasal dari pihak yang mencurinya.
+     */
+    public function acceptsData(): bool
+    {
+        return (bool) $this->is_active && $this->device_condition !== 'lost';
+    }
+
     public const TYPE_GPS = 'gps';
+
     public const TYPE_CAMERA = 'camera';
+
     public const TYPE_AUDIO = 'audio';
+
     public const TYPES = [self::TYPE_GPS, self::TYPE_CAMERA, self::TYPE_AUDIO];
 
     public static $snakeAttributes = false;
 
     protected $table = 'tracking_devices';
+
     protected $primaryKey = 'device_id';
+
     public $timestamps = false;
 
     protected $fillable = [

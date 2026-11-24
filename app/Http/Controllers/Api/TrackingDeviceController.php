@@ -151,6 +151,9 @@ class TrackingDeviceController extends ApiController
     public function telemetry(Request $request, int $id)
     {
         $device = TrackingDevice::findOrFail($id);
+        if (! $device->acceptsData()) {
+            return $this->error('Perangkat nonaktif atau berstatus hilang; data ditolak.', 409);
+        }
         $data = $request->validate([
             'battery_level' => 'nullable|integer|between:0,100',
             'signal_strength' => 'nullable|integer|between:0,100',
@@ -220,6 +223,10 @@ class TrackingDeviceController extends ApiController
     {
         $device = TrackingDevice::findOrFail($id);
 
+        if (! $device->acceptsData()) {
+            return $this->error('Perangkat nonaktif atau berstatus hilang; rekaman ditolak.', 409);
+        }
+
         if (! in_array($device->device_type, [TrackingDevice::TYPE_CAMERA, TrackingDevice::TYPE_AUDIO], true)) {
             return $this->error('Hanya perangkat kamera atau audio yang dapat mengirim rekaman.', 422);
         }
@@ -262,7 +269,7 @@ class TrackingDeviceController extends ApiController
 
         $data = $request->validate([
             'device_type' => ['sometimes', Rule::in(TrackingDevice::TYPES)],
-            'model' => ($device ? 'sometimes' : 'required') . '|string|max:100',
+            'model' => ($device ? 'sometimes' : 'required').'|string|max:100',
             'serial_number' => ['nullable', 'string', 'max:100', Rule::unique('tracking_devices', 'serial_number')->ignore($device?->device_id, 'device_id')],
             'animal_id' => ['nullable', 'integer',
                 Rule::exists('animals', 'animal_id')->whereNull('deleted_at'),

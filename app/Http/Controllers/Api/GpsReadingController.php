@@ -92,16 +92,20 @@ class GpsReadingController extends ApiController
             'created' => count($created),
             'skipped_duplicates' => $skipped,
             'readings' => $created,
-        ], count($created) . ' pembacaan GPS disimpan', 201);
+        ], count($created).' pembacaan GPS disimpan', 201);
     }
 
     private function rules(): array
     {
         return [
-            'device_id' => ['required', 'integer', Rule::exists('tracking_devices', 'device_id')->where('device_type', TrackingDevice::TYPE_GPS)],
+            'device_id' => ['required', 'integer', Rule::exists('tracking_devices', 'device_id')
+                ->where('device_type', TrackingDevice::TYPE_GPS)
+                // perangkat nonaktif/hilang tidak boleh mengirim titik GPS
+                ->where('is_active', true)
+                ->where(fn ($q) => $q->where('device_condition', '!=', 'lost'))],
             'latitude' => 'required|numeric|between:-90,90',
             'longitude' => 'required|numeric|between:-180,180',
-            'recorded_at' => 'required|date|before_or_equal:' . now()->addMinutes(5)->toDateTimeString(),
+            'recorded_at' => 'required|date|before_or_equal:'.now()->addMinutes(5)->toDateTimeString(),
             'altitude_meters' => 'nullable|numeric|between:-500,9000',
             'accuracy_meters' => 'nullable|numeric|between:0,9999',
             'checksum' => 'nullable|string|size:64',
