@@ -63,12 +63,17 @@ class PosController extends ApiController
         $data = $request->validate(['date' => 'sometimes|date', 'cashier_id' => 'sometimes|integer']);
         $isAdmin = $this->isAdmin($request);
 
-        return $this->list(PosSession::with('cashier:user_id,full_name')
-            ->withCount(['sales as transactions_count' => fn ($q) => $q->whereIn('status', ['paid', 'checked_in', 'completed'])])
+        // Bentuk data sama dengan detail sesi (termasuk summary & is_open) agar FE tidak perlu dua tipe.
+        $sessions = PosSession::with('cashier:user_id,full_name')
             ->when(! $isAdmin, fn ($q) => $q->where('cashier_id', $request->user()->user_id))
             ->when($isAdmin && isset($data['cashier_id']), fn ($q) => $q->where('cashier_id', $data['cashier_id']))
             ->when($data['date'] ?? null, fn ($q, $d) => $q->whereDate('opened_at', $d))
-            ->orderByDesc('session_id'));
+            ->orderByDesc('session_id')
+            ->limit(200)
+            ->get()
+            ->map(fn (PosSession $session) => $this->presentSession($session));
+
+        return $this->list($sessions);
     }
 
     /** Laporan satu sesi (X/Z report) beserta daftar transaksinya. */

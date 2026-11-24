@@ -130,6 +130,7 @@ class PosTest extends TestCase
             ->assertOk()->assertJsonPath('data.status', 'cancelled')->assertJsonPath('data.qr_payload', null);
 
         $expected = 100_000 + $a['total_amount'];
+        $this->getJson('/api/pos/sessions', $h)->assertOk()->assertJsonPath('data.0.summary.transactions', 1)->assertJsonPath('data.0.is_open', true);
         $this->getJson('/api/pos/session', $h)->assertJsonPath('data.expected_cash_now', $expected)
             ->assertJsonPath('data.summary.transactions', 1)->assertJsonPath('data.summary.voided', 1);
 
