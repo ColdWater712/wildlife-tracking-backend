@@ -13,7 +13,9 @@ Jalankan: uvicorn app:app --host 127.0.0.1 --port 8001
 
 from __future__ import annotations
 
+import hmac
 import os
+import re
 import subprocess
 import tempfile
 import threading
@@ -89,18 +91,28 @@ def _require(name: str):
 
 
 def check_token(x_api_key: str | None = Header(default=None)):
-    if TOKEN and x_api_key != TOKEN:
+    if TOKEN and not hmac.compare_digest(x_api_key or "", TOKEN):
         raise HTTPException(status_code=401, detail="Token ai-service tidak valid.")
 
 
 async def _save_upload(file: UploadFile, tmp: str) -> Path:
-    data = await file.read()
-    if not data:
+    max_bytes = int(MAX_UPLOAD_MB * 1024 * 1024)
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(status_code=413, detail=f"Berkas melebihi {MAX_UPLOAD_MB:.0f} MB.")
+        chunks.append(chunk)
+    if total == 0:
         raise HTTPException(status_code=422, detail="Berkas kosong.")
-    if len(data) > MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(status_code=413, detail=f"Berkas melebihi {MAX_UPLOAD_MB:.0f} MB.")
-    path = Path(tmp) / ("input" + Path(file.filename or "file").suffix[:10].lower())
-    path.write_bytes(data)
+    raw_suffix = Path(file.filename or "file").suffix.lower()
+    safe_suffix = raw_suffix if re.fullmatch(r"\.[a-z0-9]{1,8}", raw_suffix) else ""
+    path = Path(tmp) / f"input{safe_suffix}"
+    path.write_bytes(b"".join(chunks))
     return path
 
 

@@ -168,6 +168,8 @@ class TourismCatalogController extends ApiController
     {
         $config = config('services.tourism');
 
+        $simulatorEnabled = ! app()->isProduction() && (bool) ($config['payment_simulator'] ?? false);
+
         return $this->success([
             'bank_transfer' => [
                 'bank_name' => $config['bank_name'] ?: null,
@@ -176,9 +178,9 @@ class TourismCatalogController extends ApiController
             ],
             'qris_merchant_name' => $config['qris_merchant_name'] ?: null,
             'payment_window_minutes' => (int) $config['payment_window_minutes'],
-            'gateway_enabled' => ($config['webhook_secret'] ?? '') !== '' || MidtransService::enabled() || (bool) ($config['payment_simulator'] ?? false),
+            'gateway_enabled' => ($config['webhook_secret'] ?? '') !== '' || MidtransService::enabled() || $simulatorEnabled,
             'midtrans_enabled' => MidtransService::enabled(),
-            'simulator_enabled' => (bool) ($config['payment_simulator'] ?? false),
+            'simulator_enabled' => $simulatorEnabled,
         ]);
     }
 

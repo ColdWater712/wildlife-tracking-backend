@@ -3,6 +3,7 @@
 use App\Http\Middleware\CheckPermission;
 use App\Http\Middleware\CheckRole;
 use App\Http\Middleware\LogActivity;
+use App\Http\Middleware\SecurityHeaders;
 use App\Services\ApiSessionService;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
@@ -29,6 +30,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'permission' => CheckPermission::class,
             'log.activity' => LogActivity::class,
         ]);
+
+        $middleware->api(append: [SecurityHeaders::class]);
 
         $middleware->redirectGuestsTo(fn () => null);
     })

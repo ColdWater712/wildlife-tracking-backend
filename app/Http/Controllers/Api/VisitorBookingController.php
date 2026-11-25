@@ -164,7 +164,7 @@ class VisitorBookingController extends ApiController
      */
     public function simulatePayment(Request $request, string $code)
     {
-        if (! config('services.tourism.payment_simulator')) {
+        if (app()->isProduction() || ! config('services.tourism.payment_simulator')) {
             return $this->error('Simulator pembayaran tidak aktif.', 503);
         }
 
