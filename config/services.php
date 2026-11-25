@@ -66,6 +66,12 @@ return [
         'payment_simulator' => (bool) env('PAYMENT_SIMULATOR_ENABLED', false),
     ],
 
+    // Simulator kalung GPS: `php artisan schedule:work` menambah 1 titik per kalung aktif tiap 10 detik.
+    // Matikan setelah kalung fisik mengirim data sendiri lewat POST /gps-readings.
+    'gps_simulator' => [
+        'enabled' => (bool) env('GPS_SIMULATOR_ENABLED', false),
+    ],
+
     // Groq (vision, text, dan Whisper untuk transkripsi audio)
     'groq' => [
         'key' => env('GROQ_API_KEY', ''),

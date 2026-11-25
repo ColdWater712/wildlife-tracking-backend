@@ -21,7 +21,7 @@ class TrackingDeviceController extends ApiController
 
     public function index(Request $request)
     {
-        $query = TrackingDevice::query()->with(['animal', 'zone']);
+        $query = TrackingDevice::query()->with(['animal.species:species_id,common_name,scientific_name,conservation_status', 'zone']);
 
         if ($request->filled('device_type')) {
             $query->whereIn('device_type', explode(',', $request->device_type));
