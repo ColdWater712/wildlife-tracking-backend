@@ -58,6 +58,7 @@ $routes = function () {
     Route::middleware('throttle:60,1,tourism-catalog')->prefix('tourism')->group(function () {
         Route::get('routes', [TourismCatalogController::class, 'routes']);
         Route::get('routes/{slug}', [TourismCatalogController::class, 'showRoute'])->where('slug', '[a-z0-9-]+');
+        Route::get('routes/{slug}/safety', [TourismCatalogController::class, 'routeSafety'])->where('slug', '[a-z0-9-]+');
         Route::get('guides', [TourismCatalogController::class, 'guides']);
         Route::get('guides/{id}', [TourismCatalogController::class, 'showGuide']);
         Route::get('guides/{id}/photo', [TourismCatalogController::class, 'guidePhoto']);
@@ -330,6 +331,9 @@ $routes = function () {
         });
 
         // ------------------------------------------------------------ Wisata: pengunjung
+        Route::post('tourism/routes/{slug}/emergency-alert', [TourismCatalogController::class, 'sendEmergencyAlert'])
+            ->where('slug', '[a-z0-9-]+')
+            ->middleware('throttle:5,1,trail-emergency');
         Route::middleware('permission:book_tickets')->prefix('visitor')->group(function () {
             Route::get('bookings', [VisitorBookingController::class, 'index']);
             Route::post('bookings', [VisitorBookingController::class, 'store'])->middleware('throttle:10,1,visitor-booking');

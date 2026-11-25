@@ -29,7 +29,7 @@ class PricingService
     /**
      * @return array{day_type: string, lines: array<int, array{code: string, label: string, quantity: int, unit_price: int, days: int, subtotal: int}>, total: int}
      */
-    public function quote(TourRoute $route, string $visitDate, int $wni, int $wna, int $students, int $drones = 0): array
+    public function quote(TourRoute $route, string $visitDate, int $wni, int $wna, int $students, int $drones = 0, int $porters = 0): array
     {
         $date = Carbon::parse($visitDate);
         $dayType = $this->dayType($date);
@@ -77,6 +77,18 @@ class PricingService
             'days' => 1,
             'subtotal' => $participants * (int) $route->guide_fee_per_person,
         ];
+
+        if ($porters > 0) {
+            $porterFee = max(0, (int) ($route->porter_fee_per_day ?? 150000));
+            $lines[] = [
+                'code' => 'addon_porter',
+                'label' => "Tambahan Jasa Porter ({$route->name})",
+                'quantity' => $porters,
+                'unit_price' => $porterFee,
+                'days' => $days,
+                'subtotal' => $porters * $porterFee * $days,
+            ];
+        }
 
         return [
             'day_type' => $dayType,

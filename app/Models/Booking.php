@@ -17,7 +17,7 @@ class Booking extends Model
     /** Kolom status, harga, dan token tidak pernah diisi langsung dari input pengguna. */
     protected $fillable = [
         'booking_code', 'user_id', 'channel', 'pos_session_id', 'sold_by', 'route_id', 'shift_id', 'visit_date', 'day_type', 'wni_count', 'wna_count',
-        'student_count', 'drone_count', 'participant_count', 'price_lines', 'total_amount', 'status', 'expires_at',
+        'student_count', 'drone_count', 'porter_count', 'participant_count', 'price_lines', 'total_amount', 'status', 'expires_at',
         'contact_name', 'contact_phone', 'emergency_contact', 'notes',
     ];
 
@@ -28,6 +28,7 @@ class Booking extends Model
         return [
             'visit_date' => 'date:Y-m-d',
             'price_lines' => 'array',
+            'porter_count' => 'integer',
             'total_amount' => 'integer',
             'expires_at' => 'datetime',
             'checked_in_at' => 'datetime',

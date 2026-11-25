@@ -60,6 +60,8 @@ class BookingService
             $wni = (int) ($data['wni_count'] ?? 0);
             $wna = (int) ($data['wna_count'] ?? 0);
             $students = (int) ($data['student_count'] ?? 0);
+            $drones = (int) ($data['drone_count'] ?? 0);
+            $porters = (int) ($data['porter_count'] ?? 0);
             $participants = $wni + $wna + $students;
 
             $this->assertParticipants($route, $data['participants'], $wni, $wna, $students);
@@ -68,7 +70,7 @@ class BookingService
                 throw new ConflictHttpException("Kuota jadwal ini tinggal {$this->remainingCapacity($shift)} orang.");
             }
 
-            $quote = $this->pricing->quote($route, $shift->shift_date->toDateString(), $wni, $wna, $students, (int) ($data['drone_count'] ?? 0));
+            $quote = $this->pricing->quote($route, $shift->shift_date->toDateString(), $wni, $wna, $students, $drones, $porters);
 
             $booking = Booking::create([
                 'booking_code' => $this->uniqueCode(Booking::class, 'booking_code', 'TNGL-'),
@@ -80,7 +82,8 @@ class BookingService
                 'wni_count' => $wni,
                 'wna_count' => $wna,
                 'student_count' => $students,
-                'drone_count' => (int) ($data['drone_count'] ?? 0),
+                'drone_count' => $drones,
+                'porter_count' => $porters,
                 'participant_count' => $participants,
                 'price_lines' => $quote['lines'],
                 'total_amount' => $quote['total'],

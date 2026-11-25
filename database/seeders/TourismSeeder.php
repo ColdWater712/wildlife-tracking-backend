@@ -94,8 +94,47 @@ class TourismSeeder extends Seeder
     {
         $zone = GeoZone::where('zone_name', 'Zona Konservasi Utara')->value('zone_id');
         $common = [
+            'porter_fee_per_day' => 150000,
             'bring_list' => ['Sepatu trekking yang mencengkeram', 'Jas hujan atau ponco', 'Air minum minimal 1,5 liter', 'Obat pribadi', 'Lotion anti nyamuk', 'Kantong plastik untuk sampah sendiri'],
             'rules' => ['Jaga jarak minimal 10 meter dari satwa', 'Dilarang memberi makan satwa', 'Dilarang membawa pulang tumbuhan atau satwa', 'Dilarang menyalakan api di luar titik yang ditentukan', 'Sampah dibawa kembali', 'Ikuti arahan pemandu setiap saat'],
+            'emergency_contacts' => [
+                [
+                    'name' => 'Posko Komando BBTNGL Bukit Lawang',
+                    'role' => 'Koordinator Resort & Ranger Lapangan',
+                    'phone' => '+62-61-8821-0112',
+                    'radio_channel' => 'VHF 156.800 MHz (Ch. 16)',
+                    'available' => '24 Jam',
+                    'location' => 'Gerbang Utama Bukit Lawang, Langkat',
+                    'notes' => 'Pusat koordinasi evakuasi jalur & laporan darurat satwa liar.',
+                ],
+                [
+                    'name' => 'Basarnas / Tim SAR Medan-Langkat',
+                    'role' => 'Pencarian & Evakuasi Medis Jalur',
+                    'phone' => '115',
+                    'radio_channel' => 'VHF 155.250 MHz',
+                    'available' => '24 Jam',
+                    'location' => 'Pos SAR Langkat',
+                    'notes' => 'Penanganan darurat cedera berat, hipotermia, atau pendaki tersesat.',
+                ],
+                [
+                    'name' => 'Puskesmas Bohorok & Klinik Evakuasi',
+                    'role' => 'Layanan Medis & Ambulans',
+                    'phone' => '119',
+                    'radio_channel' => null,
+                    'available' => '24 Jam',
+                    'location' => 'Kec. Bohorok, Langkat',
+                    'notes' => 'Tindakan awal trauma, alergi sengatan, dan dehidrasi.',
+                ],
+                [
+                    'name' => 'Polhut Seksi Wilayah III Ketambe',
+                    'role' => 'Pengamanan & Mitigasi Konflik Satwa',
+                    'phone' => '+62-629-21455',
+                    'radio_channel' => 'VHF 157.100 MHz',
+                    'available' => '06:00–22:00 WIB',
+                    'location' => 'Resort Ketambe, Aceh Tenggara',
+                    'notes' => 'Kontak utama untuk jalur kawasan Ketambe dan Lembah Alas.',
+                ],
+            ],
         ];
 
         $routes = [

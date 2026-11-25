@@ -40,6 +40,7 @@ class VisitorBookingController extends ApiController
             'wna_count' => 'sometimes|integer|min:0|max:50',
             'student_count' => 'sometimes|integer|min:0|max:50',
             'drone_count' => 'sometimes|integer|min:0|max:5',
+            'porter_count' => 'sometimes|integer|min:0|max:20',
             'contact_name' => 'required|string|max:100',
             'contact_phone' => ['required', 'string', 'max:30', 'regex:/^[0-9+\-\s()]{8,30}$/'],
             'emergency_contact' => 'required|string|max:150',
