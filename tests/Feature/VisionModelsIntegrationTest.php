@@ -308,4 +308,58 @@ class VisionModelsIntegrationTest extends TestCase
             ->assertStatus(422)
             ->assertJsonValidationErrors('file');
     }
+
+    public function test_unknown_speciesnet_result_uses_groq_description_to_resolve_species(): void
+    {
+        config(['services.groq.key' => 'test-groq-key']);
+
+        Http::fake([
+            self::SERVICE . '/analyze-image' => Http::response([
+                'detections' => [
+                    ['category' => 'animal', 'confidence' => 0.591, 'bbox' => [0.05, 0.2, 0.85, 0.6], 'species' => null],
+                ],
+                'animal_count' => 1,
+                'person_count' => 1,
+                'vehicle_count' => 0,
+                'top_species' => null,
+                'model' => 'speciesnet-v4.0.3a',
+                'embedding_model' => 'MegaDescriptor-T-224',
+            ]),
+            'https://api.groq.com/*' => Http::response([
+                'choices' => [[
+                    'message' => [
+                        'content' => json_encode([
+                            'animal_detected' => true,
+                            'species_common_name' => null,
+                            'species_scientific_name' => null,
+                            'confidence' => 0.86,
+                            'individual_count' => 1,
+                            'physical_condition' => 'unknown',
+                            'condition_notes' => 'Satwa terlihat berbaring di atas meja pemeriksaan medis.',
+                            'behavior' => 'resting',
+                            'behavior_notes' => 'Sedang dalam penanganan medis oleh petugas.',
+                            'distinctive_features' => null,
+                            'human_activity' => [
+                                'humans_present' => true,
+                                'weapons' => false,
+                                'traps_or_snares' => false,
+                                'logging' => false,
+                                'vehicles' => false,
+                                'fire_or_smoke' => false,
+                                'notes' => 'Petugas medis',
+                            ],
+                            'objects' => [],
+                            'summary' => 'Foto menunjukkan seekor Harimau Sumatra yang sedang berbaring di atas meja pemeriksaan medis.',
+                        ]),
+                    ],
+                ]],
+            ]),
+        ]);
+
+        $this->post("/api/devices/{$this->camera()->device_id}/captures", ['file' => $this->photo()], $this->h)
+            ->assertCreated()
+            ->assertJsonPath('data.prediction.processing_status', 'completed')
+            ->assertJsonPath('data.prediction.predictedSpecies.scientific_name', 'Panthera tigris sumatrae')
+            ->assertJsonPath('data.prediction.detected_label', 'Harimau Sumatra');
+    }
 }

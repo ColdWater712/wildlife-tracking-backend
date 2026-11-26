@@ -99,14 +99,47 @@ class VisionAnalyzer
         $flags['vehicles'] = (int) ($det['vehicle_count'] ?? 0) > 0;
 
         $animalDetected = $animals > 0;
-        $commonName = $top['common_name'] ?? null;
+        $commonName = $this->cleanSpeciesLabel($top['common_name'] ?? null);
+        $scientificName = $this->cleanSpeciesLabel($top['scientific_name'] ?? null);
+        $confidence = round((float) ($top['score'] ?? ($detections[0]['confidence'] ?? 0)), 4);
+
+        // Bila model lokal (SpeciesNet) tidak mengenali spesies (unknown/kosong), gunakan hasil
+        // identifikasi spesies atau deskripsi Groq agar prediksi selaras dengan ringkasan yang dihasilkan.
+        if ($groq !== null && ($species === null || $commonName === null)) {
+            $groqSpecies = $groq['species'] ?? null;
+            if ($groqSpecies === null && ($animalDetected || ($groq['animal_detected'] ?? false))) {
+                $groqSpecies = $this->matchFromDescriptions(
+                    $groq['species_scientific_name'] ?? null,
+                    $groq['species_common_name'] ?? null,
+                    $groq['summary'] ?? null,
+                    $groq['condition_notes'] ?? null,
+                    $groq['behavior_notes'] ?? null,
+                    $groq['distinctive_features'] ?? null,
+                );
+            }
+
+            if ($groqSpecies !== null) {
+                $species = $groqSpecies;
+                $commonName = $groqSpecies->common_name;
+                $scientificName = $groqSpecies->scientific_name;
+                $animalDetected = true;
+                $animals = max(1, $animals, (int) ($groq['individual_count'] ?? 1));
+                $confidence = round(max($confidence, (float) ($groq['confidence'] ?? 0)), 4);
+            } elseif ($commonName === null && ! empty($groq['species_common_name'])) {
+                $commonName = $groq['species_common_name'];
+                $scientificName = $scientificName ?? ($groq['species_scientific_name'] ?? null);
+                $animalDetected = true;
+                $animals = max(1, $animals, (int) ($groq['individual_count'] ?? 1));
+                $confidence = round(max($confidence, (float) ($groq['confidence'] ?? 0)), 4);
+            }
+        }
 
         return [
             'animal_detected' => $animalDetected,
             'species_common_name' => $commonName ? ucfirst($commonName) : null,
-            'species_scientific_name' => $top['scientific_name'] ?? null,
+            'species_scientific_name' => $scientificName,
             'species' => $species,
-            'confidence' => round((float) ($top['score'] ?? ($detections[0]['confidence'] ?? 0)), 4),
+            'confidence' => $confidence,
             'individual_count' => $animals,
             'physical_condition' => $animalDetected ? ($groq['physical_condition'] ?? 'unknown') : null,
             'condition_notes' => $groq['condition_notes'] ?? null,
@@ -136,13 +169,18 @@ class VisionAnalyzer
     private function detectionContext(array $det): string
     {
         $top = $det['top_species'] ?? null;
-        $species = $top ? sprintf('%s (%s, skor %.0f%%)', $top['common_name'] ?? '?', $top['scientific_name'] ?? '?', ($top['score'] ?? 0) * 100) : 'tidak teridentifikasi';
+        $hasSpecies = $top && $this->cleanSpeciesLabel($top['common_name'] ?? null) !== null;
+        $species = $hasSpecies
+            ? sprintf('%s (%s, skor %.0f%%)', $top['common_name'] ?? '?', $top['scientific_name'] ?? '?', ($top['score'] ?? 0) * 100)
+            : 'tidak teridentifikasi oleh model lokal';
+
+        $guidance = $hasSpecies
+            ? 'Gunakan ini sebagai referensi untuk jumlah dan spesies; fokuskan analisis pada kondisi fisik, perilaku, ciri pembeda individu, serta tanda senjata, jerat, penebangan, atau api/asap.'
+            : 'Model lokal belum mengenali spesiesnya; jika satwa terlihat jelas pada gambar, IDENTIFIKASI spesiesnya secara akurat pada species_common_name dan species_scientific_name agar konsisten dengan ringkasan Anda, sekaligus analisis kondisi fisik, perilaku, ciri pembeda, serta tanda ancaman.';
 
         return sprintf(
-            'Model deteksi terlatih (MegaDetector + SpeciesNet + detektor wajah) sudah menemukan: %d satwa, %d manusia, %d kendaraan, %d wajah. Spesies: %s. '
-            . 'Gunakan ini sebagai fakta untuk jumlah dan spesies; fokuskan analisis pada kondisi fisik, perilaku, ciri pembeda individu, '
-            . 'serta tanda senjata, jerat, penebangan, atau api/asap.',
-            (int) ($det['animal_count'] ?? 0), (int) ($det['person_count'] ?? 0), (int) ($det['vehicle_count'] ?? 0), count($det['faces'] ?? []), $species,
+            'Model deteksi terlatih (MegaDetector + SpeciesNet + detektor wajah) sudah menemukan: %d satwa, %d manusia, %d kendaraan, %d wajah. Spesies: %s. %s',
+            (int) ($det['animal_count'] ?? 0), (int) ($det['person_count'] ?? 0), (int) ($det['vehicle_count'] ?? 0), count($det['faces'] ?? []), $species, $guidance,
         );
     }
 
@@ -255,27 +293,70 @@ PROMPT;
             ])
             ->take(30)->values()->all();
 
-        $common = $this->str($json['species_common_name'] ?? $json['label'] ?? null);
-        $scientific = $this->str($json['species_scientific_name'] ?? null);
+        $common = $this->cleanSpeciesLabel($json['species_common_name'] ?? $json['label'] ?? null);
+        $scientific = $this->cleanSpeciesLabel($json['species_scientific_name'] ?? null);
+        $summary = $this->str($json['summary'] ?? null);
+        $conditionNotes = $this->str($json['condition_notes'] ?? null);
+        $behaviorNotes = $this->str($json['behavior_notes'] ?? null);
+        $distinctiveFeatures = $this->str($json['distinctive_features'] ?? null);
         $animalDetected = (bool) ($json['animal_detected'] ?? ($common !== null));
+
+        $matchedSpecies = $animalDetected ? $this->matcher->match($scientific, $common) : null;
+        if ($matchedSpecies === null) {
+            $fromDesc = $this->matchFromDescriptions($summary, $conditionNotes, $behaviorNotes, $distinctiveFeatures);
+            if ($fromDesc !== null) {
+                $matchedSpecies = $fromDesc;
+                $animalDetected = true;
+                $common = $common ?? $fromDesc->common_name;
+                $scientific = $scientific ?? $fromDesc->scientific_name;
+            }
+        }
 
         return [
             'animal_detected' => $animalDetected,
             'species_common_name' => $common,
             'species_scientific_name' => $scientific,
-            'species' => $animalDetected ? $this->matcher->match($scientific, $common) : null,
+            'species' => $matchedSpecies,
             'confidence' => round(min(1, max(0, (float) ($json['confidence'] ?? $json['score'] ?? 0))), 4),
             'individual_count' => max(0, (int) ($json['individual_count'] ?? ($animalDetected ? 1 : 0))),
             'physical_condition' => $animalDetected ? AnalysisVocabulary::condition($json['physical_condition'] ?? null) : null,
-            'condition_notes' => $this->str($json['condition_notes'] ?? null),
+            'condition_notes' => $conditionNotes,
             'behavior' => $animalDetected ? AnalysisVocabulary::behavior($json['behavior'] ?? null) : null,
-            'behavior_notes' => $this->str($json['behavior_notes'] ?? null),
-            'distinctive_features' => $this->str($json['distinctive_features'] ?? null),
+            'behavior_notes' => $behaviorNotes,
+            'distinctive_features' => $distinctiveFeatures,
             'human_activity' => $flags,
             'objects' => $objects,
-            'summary' => $this->str($json['summary'] ?? null),
+            'summary' => $summary,
             'raw' => mb_substr($raw, 0, 4000),
         ];
+    }
+
+    private function cleanSpeciesLabel(mixed $value): ?string
+    {
+        $clean = $this->str($value);
+        if ($clean === null) {
+            return null;
+        }
+        $lower = mb_strtolower($clean);
+        if (in_array($lower, ['animal', 'mammal', 'bird', 'blank', 'no_animal', 'unidentified', 'tidak diketahui', 'tidak teridentifikasi', 'satwa'], true)) {
+            return null;
+        }
+
+        return $clean;
+    }
+
+    private function matchFromDescriptions(?string ...$texts): ?\App\Models\Species
+    {
+        $combined = mb_strtolower(trim(implode(' ', array_filter($texts))));
+        if ($combined === '') {
+            return null;
+        }
+        // Jangan salah cocokkan bila ringkasan eksplisit menyatakan tidak ada satwa
+        if (preg_match('/(tidak\s+(?:ada|menampilkan|terlihat|ditemukan)\s+satwa|tanpa\s+(?:adanya\s+)?satwa|\bno\s+animal\b)/u', $combined)) {
+            return null;
+        }
+
+        return $this->matcher->match(...$texts);
     }
 
     private function str(mixed $value): ?string
