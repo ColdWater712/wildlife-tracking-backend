@@ -27,6 +27,7 @@ use App\Http\Controllers\Api\TourismCatalogController;
 use App\Http\Controllers\Api\TrackingDeviceController;
 use App\Http\Controllers\Api\UserController;
 use App\Http\Controllers\Api\VisitorBookingController;
+use App\Http\Controllers\Api\VoiceAssistantController;
 use App\Http\Controllers\Api\WeatherDataController;
 use App\Http\Controllers\Api\WildlifeCatalogController;
 use App\Http\Middleware\RestrictDeviceTokens;
@@ -76,6 +77,8 @@ $routes = function () {
     });
     Route::post('payments/midtrans/notification', MidtransNotificationController::class)->middleware('throttle:120,1,midtrans');
     Route::post('payments/webhook', PaymentWebhookController::class)->middleware('throttle:120,1,payment-webhook');
+    // Asisten suara AI chatbot (mendukung tamu & user login via Sanctum token opsional).
+    Route::post('voice-assistant/chat', [VoiceAssistantController::class, 'chat'])->middleware('throttle:30,1,voice-assistant');
 
     Route::middleware(['auth:sanctum', RestrictDeviceTokens::class, 'log.activity'])->group(function () {
 
