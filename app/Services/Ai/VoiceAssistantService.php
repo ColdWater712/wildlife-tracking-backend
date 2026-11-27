@@ -4,6 +4,7 @@ namespace App\Services\Ai;
 
 use App\Models\AiPrediction;
 use App\Models\Animal;
+use App\Models\GeoZone;
 use App\Models\Notification;
 use App\Models\Species;
 use App\Models\TourRoute;
@@ -295,9 +296,21 @@ class VoiceAssistantService
                         ->all(),
                 ];
 
+                $zoneList = GeoZone::query()
+                    ->orderBy('zone_name')
+                    ->limit(25)
+                    ->get(['zone_id', 'zone_name', 'zone_type'])
+                    ->map(fn ($z) => [
+                        'id' => $z->zone_id,
+                        'name' => $z->zone_name,
+                        'type' => $z->zone_type,
+                    ])
+                    ->all();
+
                 $context['animals'] = $animalList;
                 $context['species'] = $speciesList;
                 $context['devices'] = $deviceList;
+                $context['geo_zones'] = $zoneList;
             } catch (Throwable) {
                 // Ignore
             }
@@ -354,7 +367,9 @@ ATURAN WAJIB:
    - Jika user ingin menekan tombol/tab/link di halaman -> gunakan {"type": "click_element", "query": "teks tombol"}.
 6. DARURAT / ANCAMAN:
    - Jika user minta tolong, darurat, terluka, tersesat, diserang satwa, atau lihat pemburu -> gunakan {"type": "trigger_sos", "emergency_type": "wildlife_attack|injury|lost|poaching|general"} dengan reply SANGAT SINGKAT: "Permintaan pertolongan terdeteksi. Ingin saya telepon nomor darurat?".
-7. Jangan pernah bilang "perintah tidak dikenali" bila maksud user bisa dipahami atau dijawab sebagai chatbot.
+7. DILARANG PINDAH HALAMAN SAAT USER BERTANYA:
+   - Jika user bertanya tentang isi dropdown/filter atau daftar data (mis. "ada zona apa saja", "ada apa aja statusnya di filter", "ada pilihan apa saja", "berapa jumlah satwa"), JANGAN gunakan action "navigate"! Gunakan {"type": "none"} dan langsung bacakan daftar opsinya dari PAGE_ELEMENTS (untuk dropdown di layar) atau LIVE_DATA (mis. geo_zones, species, animals, active_tour_routes).
+8. Jangan pernah bilang "perintah tidak dikenali" bila maksud user bisa dipahami atau dijawab sebagai chatbot.
 
 DAFTAR ACTION:
 - {"type": "none"}
