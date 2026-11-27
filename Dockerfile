@@ -2,6 +2,7 @@ FROM php:8.3-apache
 
 # Install system dependencies & PHP extensions (PostgreSQL, MySQL, SQLite, GD, Intl, Zip)
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
     git \
     curl \
     unzip \
