@@ -110,38 +110,56 @@ class VoiceAssistantService
             'content' => mb_substr(trim($input['message']), 0, 600),
         ];
 
-        try {
-            $result = $this->groq->chatJson($messages, $this->groq->textModel(), 500);
-            $json = $result['json'] ?? [];
+        // Cascade model cepat & tahan rate-limit (hindari 400 json_validate_failed & 429 ITPM pada qwen)
+        $configuredModel = $this->groq->textModel();
+        $candidates = array_values(array_unique(array_filter([
+            'llama-3.3-70b-versatile',
+            'llama-3.1-8b-instant',
+            $configuredModel,
+        ])));
 
-            $reply = $this->cleanSpokenReply((string) ($json['reply'] ?? ''), $locale);
-            $action = $this->sanitizeAction(
-                is_array($json['action'] ?? null) ? $json['action'] : ['type' => 'none'],
-                $allowedRoutes,
-                $user !== null,
-            );
+        $lastError = null;
+        foreach ($candidates as $candidateModel) {
+            try {
+                // Gunakan strict JSON untuk Llama (stabil), atau non-strict + decodeJsonObject untuk model lain
+                $useStrict = str_starts_with($candidateModel, 'llama-');
+                $result = $this->groq->chatJson($messages, $candidateModel, 350, $useStrict);
+                $json = $result['json'] ?? [];
+                $rawText = trim((string) ($result['raw'] ?? ''));
 
-            return [
-                'ok' => true,
-                'reply' => $reply,
-                'action' => $action,
-                'model' => $result['model'],
-            ];
-        } catch (Throwable $e) {
-            Log::warning('VoiceAssistantService Groq call failed', [
-                'error' => $e->getMessage(),
-                'user_id' => $user?->user_id,
-            ]);
+                // Jika model tetap membalas teks biasa tanpa JSON, gunakan teks tersebut sebagai reply (type: none)
+                $rawReply = (string) ($json['reply'] ?? ($json === [] && $rawText !== '' ? $rawText : ''));
+                $reply = $this->cleanSpokenReply($rawReply, $locale);
+                $action = $this->sanitizeAction(
+                    is_array($json['action'] ?? null) ? $json['action'] : ['type' => 'none'],
+                    $allowedRoutes,
+                    $user !== null,
+                );
 
-            return [
-                'ok' => false,
-                'fallback' => true,
-                'reply' => $locale === 'en'
-                    ? 'Unable to reach AI assistant right now.'
-                    : 'Asisten AI sedang tidak dapat dihubungi saat ini.',
-                'action' => ['type' => 'none'],
-            ];
+                return [
+                    'ok' => true,
+                    'reply' => $reply,
+                    'action' => $action,
+                    'model' => $result['model'],
+                ];
+            } catch (Throwable $e) {
+                $lastError = $e->getMessage();
+                Log::warning('VoiceAssistantService Groq attempt failed', [
+                    'model' => $candidateModel,
+                    'error' => $lastError,
+                    'user_id' => $user?->user_id,
+                ]);
+            }
         }
+
+        return [
+            'ok' => false,
+            'fallback' => true,
+            'reply' => $locale === 'en'
+                ? 'Unable to reach AI assistant right now.'
+                : 'Asisten AI sedang tidak dapat dihubungi saat ini.',
+            'action' => ['type' => 'none'],
+        ];
     }
 
     /**
@@ -342,59 +360,72 @@ class VoiceAssistantService
             ? "Nama: {$user->name}, Role: " . ($roleName ?? 'pengunjung')
             : 'Status: Belum login (tamu)';
 
-        $routesJson = json_encode($allowedRoutes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $contextJson = json_encode($liveContext, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $elementsJson = json_encode($pageElements, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        $pageSnippet = mb_substr(trim($pageContext), 0, 800);
+        $routesCompact = implode(', ', array_map(
+            fn ($r) => "{$r['href']}({$r['label']})",
+            array_slice($allowedRoutes, 0, 30),
+        ));
+
+        $elementsCompact = implode('; ', array_map(function ($el) {
+            $kind = $el['kind'] ?? 'el';
+            $lbl = $el['label'] ?? '';
+            $opts = is_array($el['options'] ?? null) ? '[' . implode('|', array_slice($el['options'], 0, 12)) . ']' : '';
+            $val = isset($el['value']) ? "={$el['value']}" : '';
+            return "{$kind}:{$lbl}{$val}{$opts}";
+        }, array_slice($pageElements, 0, 18)));
+
+        // Ringkas LIVE_DATA agar hemat token (~600 token total, bebas 429 rate-limit)
+        $compactLive = ['today' => $liveContext['today'] ?? now()->toDateString()];
+        if (isset($liveContext['unread_notifications_count'])) {
+            $compactLive['unread_notif'] = $liveContext['unread_notifications_count'];
+        }
+        if (! empty($liveContext['animals'])) {
+            $compactLive['animals'] = array_map(
+                fn ($a) => "{$a['detail_href']}={$a['name']}({$a['species']},{$a['health']})",
+                array_slice($liveContext['animals'], 0, 15),
+            );
+        }
+        if (! empty($liveContext['species'])) {
+            $compactLive['species'] = array_map(
+                fn ($s) => "{$s['detail_href']}={$s['name']}",
+                array_slice($liveContext['species'], 0, 12),
+            );
+        }
+        if (! empty($liveContext['geo_zones'])) {
+            $compactLive['zones'] = array_map(fn ($z) => $z['name'], array_slice($liveContext['geo_zones'], 0, 15));
+        }
+        if (! empty($liveContext['active_tour_routes'])) {
+            $compactLive['tours'] = array_map(
+                fn ($r) => "{$r['detail_href']}={$r['name']}",
+                array_slice($liveContext['active_tour_routes'], 0, 8),
+            );
+        }
+        if (! empty($liveContext['conservation_summary'])) {
+            $compactLive['stats'] = $liveContext['conservation_summary'];
+        }
+
+        $contextJson = json_encode($compactLive, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $pageSnippet = mb_substr(trim($pageContext), 0, 350);
 
         return <<<PROMPT
-Kamu adalah Asisten Suara AI cerdas untuk Sistem Pemantauan Satwa Liar & Ekowisata Balai Taman Nasional Gunung Leuser (BTNGL).
-Tugasmu memahami MAKSUD & TUJUAN di balik ucapan bebas user dan langsung mengeksekusi aksi yang paling tepat di antarmuka web.
+Asisten Suara AI Sistem Monitoring Satwa & Wisata BTNGL. Pahami segala bahasa sehari-hari user.
+ATURAN:
+1. {$langInstruction} Tanpa markdown/emoji/simbol di "reply".
+2. BALAS HANYA JSON VALID: {"reply":"...","action":{"type":"..."}}
+3. NAVIGASI: Jika user minta buka/pindah halaman, pakai {"type":"navigate","href":"/..."} dari ROUTES atau detail_href di LIVE_DATA (mis. "cek kondisi orangutan" -> detail_href Orangutan di LIVE_DATA.animals).
+4. FORM/DROPDOWN/TANGGAL:
+   - Pilih tanggal -> {"type":"set_date","date":"YYYY-MM-DD","field":""}
+   - Pilih opsi dropdown -> {"type":"select_option","option":"nama opsi","field":"nama dropdown"}
+   - Isi teks -> {"type":"fill_input","field":"nama kolom","value":"isi"}
+   - Klik tombol -> {"type":"click_element","query":"teks tombol"}
+5. DILARANG NAVIGATE saat user BERTANYA tentang isi dropdown/daftar data ("ada zona/status/pilihan apa saja"). Jawab langsung dari ELEMENTS/LIVE_DATA dengan {"type":"none"}.
+6. DARURAT -> {"type":"trigger_sos","emergency_type":"general"} dengan reply: "Permintaan pertolongan terdeteksi. Ingin saya telepon nomor darurat?".
+7. Aksi lain: set_theme(dark|light), set_locale(id|en), set_font_scale(md|lg|xl), set_contrast(true|false), reset_a11y, scroll(up|down|top|bottom), history(back|forward), read_page, logout, none.
 
-ATURAN WAJIB:
-1. {$langInstruction}
-2. JANGAN gunakan markdown (**, *, #, bullet, backtick, emoji) di field "reply" karena langsung dibacakan TTS.
-3. Jawab HANYA dalam JSON valid: {"reply": "...", "action": {"type": "..."}}
-4. NAVIGASI PINTAR (SPESIFIK vs UMUM):
-   - Jika user menyebut modul umum (mis. "cek data satwa", "buka daftar satwa") -> navigate ke "/animals".
-   - Jika user menyebut SATWA / SPESIES / PERANGKAT / RUTE TUR SPESIFIK (mis. "cek kondisi orangutan", "lihat detail harimau", "cek satwa HRM-01", "buka model 3D gajah", "lihat tur bukit lawang"):
-     CARILAH di LIVE_DATA.animals, LIVE_DATA.species, LIVE_DATA.devices, atau LIVE_DATA.active_tour_routes lalu navigate LANGSUNG ke detail_href / model_href yang cocok!
-     Contoh: "cek kondisi orangutan" -> pilih satwa Orangutan di LIVE_DATA.animals dan navigate ke detail_href-nya (mis. "/animals/1/detail"), atau jika tidak ada individu, ke "/species/{id}/detail".
-5. TANGGAL & FORM DI HALAMAN AKTIF:
-   - Jika user ingin memilih/mengatur tanggal (mis. "pilih tanggal 26 november 2026", "atur tanggal besok", "set tanggal 1 desember 2026") -> gunakan action {"type": "set_date", "date": "YYYY-MM-DD", "field": "nama kolom opsional"}. Konversi semua tanggal ke format ISO YYYY-MM-DD berdasarkan LIVE_DATA.today!
-   - Jika user ingin memilih opsi dropdown/filter di halaman (lihat PAGE_ELEMENTS) -> gunakan {"type": "select_option", "field": "nama dropdown opsional", "option": "teks opsi"}.
-   - Jika user ingin mengisi kolom input teks -> gunakan {"type": "fill_input", "field": "nama kolom", "value": "isi"}.
-   - Jika user ingin menekan tombol/tab/link di halaman -> gunakan {"type": "click_element", "query": "teks tombol"}.
-6. DARURAT / ANCAMAN:
-   - Jika user minta tolong, darurat, terluka, tersesat, diserang satwa, atau lihat pemburu -> gunakan {"type": "trigger_sos", "emergency_type": "wildlife_attack|injury|lost|poaching|general"} dengan reply SANGAT SINGKAT: "Permintaan pertolongan terdeteksi. Ingin saya telepon nomor darurat?".
-7. DILARANG PINDAH HALAMAN SAAT USER BERTANYA:
-   - Jika user bertanya tentang isi dropdown/filter atau daftar data (mis. "ada zona apa saja", "ada apa aja statusnya di filter", "ada pilihan apa saja", "berapa jumlah satwa"), JANGAN gunakan action "navigate"! Gunakan {"type": "none"} dan langsung bacakan daftar opsinya dari PAGE_ELEMENTS (untuk dropdown di layar) atau LIVE_DATA (mis. geo_zones, species, animals, active_tour_routes).
-8. Jangan pernah bilang "perintah tidak dikenali" bila maksud user bisa dipahami atau dijawab sebagai chatbot.
-
-DAFTAR ACTION:
-- {"type": "none"}
-- {"type": "navigate", "href": "/..."}
-- {"type": "set_date", "date": "YYYY-MM-DD", "field": ""}
-- {"type": "select_option", "option": "teks opsi", "field": ""}
-- {"type": "fill_input", "field": "nama kolom", "value": "isi"}
-- {"type": "click_element", "query": "teks tombol"}
-- {"type": "set_theme", "scheme": "dark"|"light"}
-- {"type": "set_locale", "locale": "id"|"en"}
-- {"type": "set_font_scale", "scale": "md"|"lg"|"xl"}
-- {"type": "set_contrast", "high": true|false}
-- {"type": "reset_a11y"}
-- {"type": "scroll", "direction": "up"|"down"|"top"|"bottom"}
-- {"type": "history", "direction": "back"|"forward"}
-- {"type": "read_page"}
-- {"type": "trigger_sos", "emergency_type": "general"}
-- {"type": "logout"}
-
-INFO USER: {$userSummary}
-HALAMAN SAAT INI: {$currentPath}
-ALLOWED_ROUTES: {$routesJson}
-PAGE_ELEMENTS: {$elementsJson}
+USER: {$userSummary} | PATH: {$currentPath}
+ROUTES: {$routesCompact}
+ELEMENTS: {$elementsCompact}
 LIVE_DATA: {$contextJson}
-CURRENT_PAGE_SUMMARY: {$pageSnippet}
+PAGE: {$pageSnippet}
 PROMPT;
     }
 

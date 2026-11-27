@@ -39,17 +39,21 @@ class GroqClient
      *
      * @return array{json: array, raw: string, model: string}
      */
-    public function chatJson(array $messages, ?string $model = null, int $maxTokens = 1200): array
+    public function chatJson(array $messages, ?string $model = null, int $maxTokens = 1200, bool $strictJsonFormat = true): array
     {
         $model ??= $this->textModel();
 
-        $response = $this->http()->post("{$this->baseUrl}/chat/completions", [
+        $payload = [
             'model' => $model,
             'messages' => $messages,
             'temperature' => 0.1,
             'max_completion_tokens' => $maxTokens,
-            'response_format' => ['type' => 'json_object'],
-        ]);
+        ];
+        if ($strictJsonFormat) {
+            $payload['response_format'] = ['type' => 'json_object'];
+        }
+
+        $response = $this->http()->post("{$this->baseUrl}/chat/completions", $payload);
 
         if (! $response->successful()) {
             throw new RuntimeException('Groq API error (' . $response->status() . '): ' . mb_substr($response->body(), 0, 300));
