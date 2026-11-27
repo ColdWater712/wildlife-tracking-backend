@@ -593,8 +593,12 @@ PROMPT;
             return false;
         }
 
-        // Hindari false-positive untuk frasa seperti "tidak ada satwa lain"
-        $stripped = preg_replace('/tidak\s+ada\s+satwa\s+lain(?:nya)?/u', '', $combined) ?? $combined;
+        // Hindari false-positive untuk frasa seperti "tidak ada satwa lain" / "tidak ada hewan lainnya" / "tanpa ada hewan lain"
+        $stripped = preg_replace(
+            '/(?:tidak\s+(?:ada|terlihat|ditemukan|tampak)|tanpa\s+(?:ada|adanya)?)\s+(?:satwa|hewan|binatang)\s+lain(?:nya)?/u',
+            '',
+            $combined,
+        ) ?? $combined;
 
         return preg_match(
             '/(tidak\s+(?:ada|menampilkan|terlihat|ditemukan|terdeteksi)\s+(?:satwa|hewan|binatang)|tanpa\s+(?:adanya\s+)?(?:satwa|hewan)|\bno\s+animals?\b)/u',

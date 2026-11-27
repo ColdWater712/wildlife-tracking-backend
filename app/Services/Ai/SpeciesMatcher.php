@@ -10,8 +10,8 @@ class SpeciesMatcher
 {
     /** Sinonim umum (ID/EN/latin) -> kata kunci yang muncul di nama spesies master. */
     private const ALIASES = [
-        'orangutan' => ['orangutan', 'orang utan', 'pongo', 'great ape', 'kera besar'],
-        'harimau' => ['harimau sumatra', 'harimau sumatera', 'harimau', 'sumatran tiger', 'tiger', 'panthera tigris', 'tigris'],
+        'orangutan' => ['orangutan', 'orang utan', 'orang-utan', 'mawas', 'maweh', 'pongo', 'great ape', 'kera besar'],
+        'harimau' => ['harimau sumatra', 'harimau sumatera', 'harimau', 'rimau', 'macan', 'sumatran tiger', 'tiger', 'panthera tigris', 'tigris'],
         'gajah' => ['gajah sumatra', 'gajah sumatera', 'gajah', 'sumatran elephant', 'asian elephant', 'elephant', 'elephas'],
         'badak' => ['badak sumatra', 'badak sumatera', 'badak', 'sumatran rhino', 'rhinoceros', 'rhino', 'dicerorhinus'],
         'rusa' => ['rusa sambar', 'rusa', 'sambar deer', 'sambar', 'deer', 'cervus', 'rusa unicolor'],
@@ -57,7 +57,7 @@ class SpeciesMatcher
         'Kukang' => ['kukang', 'slow loris', 'nycticebus'],
         'Babi Hutan' => ['babi hutan', 'celeng', 'wild boar', 'boar', 'sus scrofa'],
         'Kijang' => ['kijang', 'muntjac', 'barking deer', 'muntiacus'],
-        'Kancil' => ['kancil', 'pelanduk', 'mouse deer', 'chevrotain', 'tragulus'],
+        'Kancil' => ['kancil', 'pelanduk', 'mouse deer', 'mouse-deer', 'chevrotain', 'tragulus'],
         'Kambing Hutan' => ['kambing hutan', 'sumatran serow', 'serow', 'capricornis'],
         'Binturong' => ['binturong', 'bearcat', 'arctictis'],
         'Musang' => ['musang', 'luwak', 'civet', 'paradoxurus'],
@@ -172,11 +172,21 @@ class SpeciesMatcher
 
         // 3. Lewat kamus sinonim (dengan batas kata agar "cat" tidak cocok "catch" / "ape" tidak cocok "escape")
         foreach ($labels as $label) {
-            // Hindari tabrakan "Rangkong Badak" (Buceros rhinoceros) dengan "Badak Sumatra" (Dicerorhinus).
+            // Hindari tabrakan antar spesies berbeda dengan kata serumpun:
+            // - "Rangkong Badak" (Buceros rhinoceros) vs "Badak Sumatra"
+            // - "Macan Dahan" / "Macan Tutul" vs "Harimau" (macan)
+            // - "Mouse-deer" / "Barking deer" vs "Rusa Sambar" (deer)
             $labelWithoutHornbill = preg_replace('/\b(rangkong\s+badak|rhinoceros\s+hornbill|buceros\s+rhinoceros)\b/u', '', $label) ?? $label;
+            $labelWithoutLeopard = preg_replace('/\b(macan\s+dahan|macan\s+tutul|macan\s+kumbang)\b/u', '', $label) ?? $label;
+            $labelWithoutSmallDeer = preg_replace('/\b(mouse[\s-]deer|barking\s+deer)\b/u', '', $label) ?? $label;
 
             foreach (self::ALIASES as $keyword => $aliases) {
-                $targetLabel = $keyword === 'badak' ? $labelWithoutHornbill : $label;
+                $targetLabel = match ($keyword) {
+                    'badak' => $labelWithoutHornbill,
+                    'harimau' => $labelWithoutLeopard,
+                    'rusa' => $labelWithoutSmallDeer,
+                    default => $label,
+                };
                 foreach ($aliases as $alias) {
                     if (! self::containsPhrase($targetLabel, $alias)) {
                         continue;
@@ -215,10 +225,15 @@ class SpeciesMatcher
         }
 
         $combinedWithoutHornbill = preg_replace('/\b(rangkong\s+badak|rhinoceros\s+hornbill|buceros\s+rhinoceros)\b/u', '', $combined) ?? $combined;
+        $combinedWithoutSmallDeer = preg_replace('/\b(mouse[\s-]deer|barking\s+deer)\b/u', '', $combined) ?? $combined;
 
         $found = [];
         foreach (self::GENERAL_ANIMALS as $canonical => $aliases) {
-            $haystack = in_array($canonical, ['Badak', 'Badak Sumatra'], true) ? $combinedWithoutHornbill : $combined;
+            $haystack = match (true) {
+                in_array($canonical, ['Badak', 'Badak Sumatra'], true) => $combinedWithoutHornbill,
+                in_array($canonical, ['Rusa', 'Rusa Sambar'], true) => $combinedWithoutSmallDeer,
+                default => $combined,
+            };
             foreach ($aliases as $alias) {
                 if (self::containsPhrase($haystack, $alias)) {
                     $found[] = $canonical;
