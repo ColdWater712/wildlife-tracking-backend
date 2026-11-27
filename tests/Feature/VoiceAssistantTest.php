@@ -94,4 +94,45 @@ class VoiceAssistantTest extends TestCase
             ->assertJsonPath('data.fallback', true)
             ->assertJsonPath('data.action.type', 'none');
     }
+
+    public function test_voice_chatbot_allows_deep_entity_detail_navigation_and_date_selection(): void
+    {
+        $groq = Mockery::mock(GroqClient::class);
+        $groq->shouldReceive('isConfigured')->andReturn(true);
+        $groq->shouldReceive('textModel')->andReturn('llama-3.3-70b-versatile');
+        $groq->shouldReceive('chatJson')->twice()->andReturn(
+            [
+                'json' => [
+                    'reply' => 'Membuka detail kondisi Orangutan Sumatra.',
+                    'action' => ['type' => 'navigate', 'href' => '/animals/1/detail'],
+                ],
+                'raw' => '{}',
+                'model' => 'llama-3.3-70b-versatile',
+            ],
+            [
+                'json' => [
+                    'reply' => 'Tanggal diatur ke 26 November 2026.',
+                    'action' => ['type' => 'set_date', 'date' => '2026-11-26', 'field' => 'tanggal'],
+                ],
+                'raw' => '{}',
+                'model' => 'llama-3.3-70b-versatile',
+            ],
+        );
+        $this->app->instance(GroqClient::class, $groq);
+
+        $this->postJson('/api/voice-assistant/chat', [
+            'message' => 'cek kondisi orangutan',
+            'locale' => 'id',
+            'allowed_routes' => [['href' => '/animals', 'label' => 'Satwa']],
+        ])->assertOk()
+            ->assertJsonPath('data.action.type', 'navigate')
+            ->assertJsonPath('data.action.href', '/animals/1/detail');
+
+        $this->postJson('/api/voice-assistant/chat', [
+            'message' => 'pilih tanggal 26 november 2026',
+            'locale' => 'id',
+        ])->assertOk()
+            ->assertJsonPath('data.action.type', 'set_date')
+            ->assertJsonPath('data.action.date', '2026-11-26');
+    }
 }

@@ -18,6 +18,7 @@ class VoiceAssistantController extends Controller
             'locale' => ['nullable', 'string', 'in:id,en'],
             'current_path' => ['nullable', 'string', 'max:200'],
             'page_context' => ['nullable', 'string', 'max:1200'],
+            'page_elements' => ['nullable', 'array', 'max:40'],
             'allowed_routes' => ['nullable', 'array', 'max:50'],
             'allowed_routes.*.href' => ['required_with:allowed_routes', 'string', 'max:120'],
             'allowed_routes.*.label' => ['required_with:allowed_routes', 'string', 'max:80'],
