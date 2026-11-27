@@ -10,6 +10,7 @@ use App\Models\TrackingDevice;
 use App\Services\DeviceHealthService;
 use App\Services\MonitoringStatsService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends ApiController
@@ -18,20 +19,38 @@ class DashboardController extends ApiController
 
     public function index(Request $request)
     {
-        $data = $this->stats->collect(now()->subDays(30)->toDateString(), now()->toDateString());
+        $userId = $request->user()->user_id;
+
+        $shared = Cache::remember('dashboard:shared', 30, function () {
+            $data = $this->stats->collect(now()->subDays(30)->toDateString(), now()->toDateString());
+
+            return [
+                ...$data['statistics'],
+                'device_alerts' => TrackingDevice::query()
+                    ->where(fn ($q) => $q->where('battery_level', '<', DeviceHealthService::LOW_BATTERY)
+                        ->orWhereIn('device_condition', ['damaged', 'lost']))
+                    ->get(['device_id', 'device_type', 'animal_id', 'model', 'battery_level', 'signal_strength', 'device_condition']),
+                'latest_threats' => AiPrediction::query()
+                    ->with(['media.zone', 'media.device'])
+                    ->whereIn('threat_level', ['high', 'critical'])
+                    ->latest('processed_at')->limit(5)->get(),
+                'latest_incidents' => IncidentReport::query()->with(['animal', 'zone'])->latest('timestamp')->limit(5)->get(),
+                'latest_readings' => GpsReading::query()->with(['device.animal'])->latest('recorded_at')->limit(5)->get(),
+            ];
+        });
+
+        $latestNotifications = Notification::query()
+            ->where('user_id', $userId)
+            ->latest('created_at')
+            ->limit(5)
+            ->get();
+
+        $unreadCount = Notification::where('user_id', $userId)->where('is_read', false)->count();
 
         return $this->success([
-            ...$data['statistics'],
-            'unread_notifications' => Notification::where('user_id', $request->user()->user_id)->where('is_read', false)->count(),
-            'device_alerts' => TrackingDevice::query()
-                ->where(fn ($q) => $q->where('battery_level', '<', DeviceHealthService::LOW_BATTERY)
-                    ->orWhereIn('device_condition', ['damaged', 'lost']))
-                ->get(['device_id', 'device_type', 'animal_id', 'model', 'battery_level', 'signal_strength', 'device_condition']),
-            'latest_threats' => AiPrediction::query()
-                ->with(['media.zone', 'media.device'])
-                ->whereIn('threat_level', ['high', 'critical'])
-                ->latest('processed_at')->limit(5)->get(),
-            'latest_incidents' => IncidentReport::query()->with(['animal', 'zone'])->latest('timestamp')->limit(5)->get(),
+            ...$shared,
+            'unread_notifications' => $unreadCount,
+            'latest_notifications' => $latestNotifications,
         ]);
     }
 
