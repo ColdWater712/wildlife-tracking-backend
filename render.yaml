@@ -1,0 +1,36 @@
+services:
+  - type: web
+    name: wildlife-tracking-api
+    runtime: docker
+    plan: free
+    region: singapore
+    healthCheckPath: /up
+    envVars:
+      - key: APP_NAME
+        value: Wildlife Tracking API
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: APP_KEY
+        sync: false
+      - key: TRUSTED_PROXIES
+        value: "*"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_URL
+        sync: false
+      - key: FRONTEND_URLS
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_TEXT_MODEL
+        value: llama-3.3-70b-versatile
+      - key: GROQ_VISION_MODEL
+        value: meta-llama/llama-4-scout-17b-16e-instruct
+      - key: RUN_MIGRATIONS
+        value: "true"
+      - key: RUN_SEEDERS
+        value: "false"

@@ -36,6 +36,7 @@ class VoiceAssistantService
         'click_element',
         'fill_input',
         'set_date',
+        'list_options',
         'select_option',
         'trigger_sos',
         'logout',
@@ -169,7 +170,7 @@ class VoiceAssistantService
     private function normalizeAllowedRoutes(array $routes): array
     {
         $clean = [];
-        foreach (array_slice($routes, 0, 50) as $route) {
+        foreach (array_slice($routes, 0, 70) as $route) {
             if (! is_array($route)) {
                 continue;
             }
@@ -362,7 +363,7 @@ class VoiceAssistantService
 
         $routesCompact = implode(', ', array_map(
             fn ($r) => "{$r['href']}({$r['label']})",
-            array_slice($allowedRoutes, 0, 30),
+            array_slice($allowedRoutes, 0, 65),
         ));
 
         $elementsCompact = implode('; ', array_map(function ($el) {
@@ -371,7 +372,7 @@ class VoiceAssistantService
             $opts = is_array($el['options'] ?? null) ? '[' . implode('|', array_slice($el['options'], 0, 12)) . ']' : '';
             $val = isset($el['value']) ? "={$el['value']}" : '';
             return "{$kind}:{$lbl}{$val}{$opts}";
-        }, array_slice($pageElements, 0, 18)));
+        }, array_slice($pageElements, 0, 30)));
 
         // Ringkas LIVE_DATA agar hemat token (~600 token total, bebas 429 rate-limit)
         $compactLive = ['today' => $liveContext['today'] ?? now()->toDateString()];
@@ -411,12 +412,12 @@ Asisten Suara AI Sistem Monitoring Satwa & Wisata BTNGL. Pahami segala bahasa se
 ATURAN:
 1. {$langInstruction} Tanpa markdown/emoji/simbol di "reply".
 2. BALAS HANYA JSON VALID: {"reply":"...","action":{"type":"..."}}
-3. NAVIGASI: Jika user minta buka/pindah halaman, pakai {"type":"navigate","href":"/..."} dari ROUTES atau detail_href di LIVE_DATA (mis. "cek kondisi orangutan" -> detail_href Orangutan di LIVE_DATA.animals).
-4. FORM/DROPDOWN/TANGGAL:
-   - Pilih tanggal -> {"type":"set_date","date":"YYYY-MM-DD","field":""}
+3. NAVIGASI: Jika user minta buka/pindah halaman atau menu sidebar (termasuk grup induk seperti Lapangan->/animals, Master Data->/species, Analisis AI->/ai/vision, Laporan->/statistics, Kelola Wisata->/tourism/bookings, Sistem->/users), pakai {"type":"navigate","href":"/..."} dari ROUTES atau detail_href di LIVE_DATA (mis. "cek kondisi orangutan" -> detail_href Orangutan di LIVE_DATA.animals).
+4. FORM/DROPDOWN/TANGGAL/TOMBOL:
+   - Pilih tanggal -> {"type":"set_date","date":"YYYY-MM-DD","field":"dari|sampai|..."}
    - Pilih opsi dropdown -> {"type":"select_option","option":"nama opsi","field":"nama dropdown"}
    - Isi teks -> {"type":"fill_input","field":"nama kolom","value":"isi"}
-   - Klik tombol -> {"type":"click_element","query":"teks tombol"}
+   - Klik tombol/tab/preset (mis. 7 hari, 30 hari, Unduh PDF, Reset Filter) -> {"type":"click_element","query":"teks tombol"}
 5. DILARANG NAVIGATE saat user BERTANYA tentang isi dropdown/daftar data ("ada zona/status/pilihan apa saja"). Jawab langsung dari ELEMENTS/LIVE_DATA dengan {"type":"none"}.
 6. DARURAT -> {"type":"trigger_sos","emergency_type":"general"} dengan reply: "Permintaan pertolongan terdeteksi. Ingin saya telepon nomor darurat?".
 7. Aksi lain: set_theme(dark|light), set_locale(id|en), set_font_scale(md|lg|xl), set_contrast(true|false), reset_a11y, scroll(up|down|top|bottom), history(back|forward), read_page, logout, none.
@@ -444,6 +445,10 @@ PROMPT;
         return match ($type) {
             'navigate' => $this->sanitizeNavigateAction($action, $allowedRoutes),
             'set_date' => $this->sanitizeDateAction($action),
+            'list_options' => [
+                'type' => 'list_options',
+                'field' => mb_substr(trim((string) ($action['field'] ?? '')), 0, 80),
+            ],
             'select_option' => trim((string) ($action['option'] ?? '')) !== ''
                 ? [
                     'type' => 'select_option',
