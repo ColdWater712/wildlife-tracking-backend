@@ -79,7 +79,6 @@ $routes = function () {
     Route::post('payments/webhook', PaymentWebhookController::class)->middleware('throttle:120,1,payment-webhook');
     // Asisten suara AI chatbot (mendukung tamu & user login via Sanctum token opsional).
     Route::post('voice-assistant/chat', [VoiceAssistantController::class, 'chat'])->middleware('throttle:30,1,voice-assistant');
-    Route::post('voice-assistant/transcribe', [VoiceAssistantController::class, 'transcribe'])->middleware('throttle:30,1,voice-transcribe');
 
     Route::middleware(['auth:sanctum', RestrictDeviceTokens::class, 'log.activity'])->group(function () {
 
