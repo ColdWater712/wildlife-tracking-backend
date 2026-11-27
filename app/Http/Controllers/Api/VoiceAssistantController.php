@@ -3,13 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Ai\GroqClient;
 use App\Services\Ai\VoiceAssistantService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class VoiceAssistantController extends Controller
 {
-    public function __construct(private VoiceAssistantService $assistant) {}
+    public function __construct(
+        private VoiceAssistantService $assistant,
+        private GroqClient $groq,
+    ) {}
 
     public function chat(Request $request): JsonResponse
     {
@@ -57,5 +61,51 @@ class VoiceAssistantController extends Controller
                 'fallback' => false,
             ],
         ]);
+    }
+
+    /**
+     * Transkripsi rekaman suara mikrofon lewat Groq Whisper (fallback andal saat Web Speech API browser bermasalah).
+     */
+    public function transcribe(Request $request): JsonResponse
+    {
+        $request->validate([
+            'audio' => ['required', 'file', 'max:10240'],
+        ]);
+
+        if (! $this->groq->isConfigured()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'GROQ_API_KEY belum dikonfigurasi.',
+                'data' => null,
+            ], 503);
+        }
+
+        $file = $request->file('audio');
+        $ext = $file->getClientOriginalExtension() ?: 'webm';
+        $tmpPath = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'voice_' . uniqid('', true) . '.' . $ext;
+        $file->move(dirname($tmpPath), basename($tmpPath));
+
+        try {
+            $result = $this->groq->transcribe($tmpPath);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'OK',
+                'data' => [
+                    'text' => trim((string) ($result['text'] ?? '')),
+                    'language' => $result['language'] ?? null,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Gagal mentranskripsi suara: ' . $e->getMessage(),
+                'data' => null,
+            ], 502);
+        } finally {
+            if (is_file($tmpPath)) {
+                @unlink($tmpPath);
+            }
+        }
     }
 }
